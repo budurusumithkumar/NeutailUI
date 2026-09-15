@@ -1,0 +1,24 @@
+# Neu.Tail Frontend
+
+ReactJS web frontend for Neu.Tail, an AI shopping-assistant experience. This repo is frontend-only — the FastAPI backend is owned by a separate team; the contract between them lives at [`NeuTail_Mission4_UI_Backend_OpenAPI.json`](NeuTail_Mission4_UI_Backend_OpenAPI.json).
+
+**Start with [docs/README.md](docs/README.md)** — the SDD (spec-driven development) artifacts written before this code, covering scope, screens, user flows, the API integration map (including contract gaps like cart), the chat-response rendering contract, and architecture. Read those before making structural changes here.
+
+## Stack
+React 18 + TypeScript, Vite, React Router, TanStack Query, Zustand, Axios, Tailwind CSS v4. See [docs/05-architecture.md](docs/05-architecture.md) for the rationale and folder structure.
+
+## Getting started
+```bash
+npm install
+cp .env.example .env   # point VITE_API_BASE_URL at your backend, defaults to http://localhost:8000
+npm run dev
+```
+
+## Scripts
+- `npm run dev` — start the Vite dev server.
+- `npm run build` — type-check (`tsc -b`) then production build.
+- `npm run lint` — oxlint.
+- `npm run preview` — preview the production build locally.
+
+## Notable gap: Cart
+There is no cart endpoint in the current API contract. Cart is implemented client-side (`src/cart/`) behind a `CartRepository` interface with a `localStorage` implementation, so it does not sync across devices yet. See Gap #1 in [docs/03-api-integration.md](docs/03-api-integration.md) for what the backend would need to add to make it durable and account-scoped.

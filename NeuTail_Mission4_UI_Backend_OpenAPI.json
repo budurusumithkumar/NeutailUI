@@ -1,0 +1,1017 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Neu.Tail Mission 4 - UI Backend API",
+    "version": "1.0.0",
+    "description": "API contract between the Neu.Tail demo UI and FastAPI backend."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local demo backend"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication"
+    },
+    {
+      "name": "Sessions"
+    },
+    {
+      "name": "Chat"
+    },
+    {
+      "name": "Customer"
+    },
+    {
+      "name": "Health"
+    }
+  ],
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Login",
+        "operationId": "login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Get current authenticated identity",
+        "operationId": "getCurrentUser",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authenticated identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthUser"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Logout",
+        "operationId": "logout",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Logged out"
+          }
+        }
+      }
+    },
+    "/api/v1/sessions": {
+      "post": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Start a customer session",
+        "operationId": "createSession",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Get session",
+        "operationId": "getSession",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Close session",
+        "operationId": "closeSession",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session closed"
+          },
+          "404": {
+            "description": "Session not found"
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{session_id}/context": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Get sanitized session context",
+        "operationId": "getSessionContext",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionContext"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found"
+          }
+        }
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Send customer message",
+        "description": "Main UI endpoint. Customer identity is derived from JWT; UI must not send customer_id.",
+        "operationId": "chat",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              },
+              "examples": {
+                "productDiscovery": {
+                  "value": {
+                    "session_id": "S1001",
+                    "message": "I need a dress for a wedding"
+                  }
+                },
+                "fitFollowup": {
+                  "value": {
+                    "session_id": "S1001",
+                    "message": "Will size 12 fit me?",
+                    "selected_sku": "SKU00123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Neu.Tail response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "500": {
+            "description": "Backend error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers/me/summary": {
+      "get": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Get customer summary for UI",
+        "operationId": "getCustomerSummary",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthUser": {
+        "type": "object",
+        "required": [
+          "customer_id",
+          "display_name",
+          "role"
+        ],
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "example": "CUST001"
+          },
+          "display_name": {
+            "type": "string",
+            "example": "Olivia Hart"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "customer",
+              "stylist",
+              "admin"
+            ]
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "user"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string",
+            "example": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "example": 3600
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthUser"
+          }
+        }
+      },
+      "CreateSessionRequest": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "web",
+              "mobile",
+              "demo"
+            ],
+            "default": "web"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionResponse": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "customer_id",
+          "status",
+          "created_at",
+          "turn_count"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "example": "S1001"
+          },
+          "customer_id": {
+            "type": "string",
+            "example": "CUST001"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "CLOSED"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "turn_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SessionContext": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "customer_id",
+          "turn_count"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "current_intent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occasion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "selected_sku": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requested_size": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_agent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turn_count": {
+            "type": "integer"
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ChatRequest": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "message"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "selected_sku": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional selected product from UI."
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomerContextSummary": {
+        "type": "object",
+        "properties": {
+          "segment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "loyalty_tier": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferred_colors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferred_styles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "usual_size": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ProductCard": {
+        "type": "object",
+        "required": [
+          "sku",
+          "name",
+          "price_gbp",
+          "recommended_score",
+          "reason_codes",
+          "available"
+        ],
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "price_gbp": {
+            "type": "number",
+            "minimum": 0
+          },
+          "image_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recommended_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "reason_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "available_sizes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FitResult": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "requested_size": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recommended_size": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "risk_band": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          },
+          "reason_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "explanation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "UpsellResult": {
+        "type": "object",
+        "properties": {
+          "eligible": {
+            "type": "boolean"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "PRESENT_OFFER",
+              "NO_OFFER"
+            ]
+          },
+          "service_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AgentActivity": {
+        "type": "object",
+        "required": [
+          "agent",
+          "status"
+        ],
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "STARTED",
+              "COMPLETED",
+              "FAILED",
+              "SKIPPED"
+            ]
+          },
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "ChatResponse": {
+        "type": "object",
+        "required": [
+          "trace_id",
+          "session_id",
+          "intent",
+          "message",
+          "agent_activity"
+        ],
+        "properties": {
+          "trace_id": {
+            "type": "string",
+            "description": "Correlation ID for LangSmith trace lookup."
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "PRODUCT_DISCOVERY",
+              "FIT_QUERY",
+              "SERVICE_QUERY",
+              "GENERAL_QUERY",
+              "CLARIFICATION"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "customer_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomerContextSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductCard"
+            }
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FitResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "upsell": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpsellResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agent_activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentActivity"
+            }
+          }
+        }
+      },
+      "CustomerSummary": {
+        "type": "object",
+        "required": [
+          "customer_id",
+          "display_name"
+        ],
+        "properties": {
+          "customer_id": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "segment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "loyalty_tier": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "points_balance": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "preferred_categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferred_colors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferred_styles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "usual_size": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fit_preference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok"
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "1.0.0"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "properties": {
+          "error_code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "details": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}

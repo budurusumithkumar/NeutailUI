@@ -1,3 +1,4 @@
+import { normalizeChatResponse } from "../../api/chatResponseAdapter";
 import type { TranscriptEntry } from "./types";
 
 // The backend contract has no endpoint to retrieve prior messages (docs/03-api-integration.md,
@@ -10,7 +11,14 @@ function cacheKey(sessionId: string): string {
 export function loadTranscript(sessionId: string): TranscriptEntry[] {
   try {
     const raw = sessionStorage.getItem(cacheKey(sessionId));
-    return raw ? (JSON.parse(raw) as TranscriptEntry[]) : [];
+    if (!raw) return [];
+
+    const entries = JSON.parse(raw) as TranscriptEntry[];
+    return entries.map((entry) =>
+      entry.kind === "assistant"
+        ? { ...entry, response: normalizeChatResponse(entry.response) }
+        : entry,
+    );
   } catch {
     return [];
   }

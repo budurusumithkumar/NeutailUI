@@ -14,6 +14,8 @@ interface ChatTurnProps {
 // Implements the rendering algorithm in docs/04-chat-response-rendering.md:
 // text always, then products / fit / upsell if present, then the activity strip.
 export function ChatTurn({ response, onAddToCart, onAskFit, onOpenDetail }: ChatTurnProps) {
+  const products = response.products ?? [];
+  const agentActivity = response.agent_activity ?? [];
   const showUpsell =
     response.upsell?.eligible === true && response.upsell.action === "PRESENT_OFFER";
 
@@ -23,9 +25,9 @@ export function ChatTurn({ response, onAddToCart, onAskFit, onOpenDetail }: Chat
         {response.message}
       </div>
 
-      {response.products.length > 0 && (
+      {products.length > 0 && (
         <div className="flex gap-3 overflow-x-auto pb-1">
-          {response.products.map((product) => (
+          {products.map((product) => (
             <ProductCard
               key={product.sku}
               product={product}
@@ -41,7 +43,7 @@ export function ChatTurn({ response, onAddToCart, onAskFit, onOpenDetail }: Chat
 
       {showUpsell && response.upsell && <UpsellCard upsell={response.upsell} />}
 
-      <AgentActivityStrip activity={response.agent_activity} />
+      <AgentActivityStrip activity={agentActivity} />
     </div>
   );
 }

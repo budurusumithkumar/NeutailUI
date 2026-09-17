@@ -42,11 +42,14 @@ const SEGMENTATION_CONFIG = {
   maxDetections: 1,
 } as const;
 
-// How far below the detected face's bottom edge (in multiples of the face's
-// own height) to still allow before cutting the mask off — covers the neck
-// itself before the collar starts. Tuned as a starting heuristic; there's no
-// hard measurement backing this, so it may need another pass.
-const NECK_ALLOWANCE_FACTOR = 0.5;
+// The face's linear size is approximated as sqrt(pixelCount) (see the same
+// reasoning on GarmentCentroid below) — never a min/max over raw pixels,
+// which a single stray pixel anywhere (a hand mistaken for skin, say) can
+// drag arbitrarily far. FACE_BOTTOM_FACTOR estimates the distance from the
+// face's own centroid down to its chin; NECK_ALLOWANCE_FACTOR then adds room
+// for the neck itself before the collar starts. Both are starting heuristics.
+const FACE_BOTTOM_FACTOR = 0.65;
+const NECK_ALLOWANCE_FACTOR = 0.45;
 
 export interface GarmentCentroid {
   x: number;
@@ -71,22 +74,18 @@ export interface GarmentSegmentation {
  *
  * The raw part-segmentation boundary alone isn't reliable at close webcam
  * range: pixels near the neck/chin get misclassified as torso often enough
- * that the mask visibly bled up onto the face and blurred it. An earlier
- * version tried cutting the mask off at the pose-estimated shoulder line,
- * but that had no visible effect in practice — the bundled pose estimator
- * likely isn't detecting shoulders confidently enough for it to engage.
+ * that the mask visibly bled up onto the face and blurred it. This cuts the
+ * mask off using the *face* pixels from the same part-segmentation pass —
+ * found where the face's mean position is, sized by how many pixels it
+ * covers — rather than trusting the torso part label near that boundary.
  *
- * This instead uses the *face* pixels from the same part-segmentation pass
- * (they're evidently reliable — the face itself never renders recolored)
- * to find where the face actually ends, and cuts the mask off a bit below
- * that (allowing room for the neck itself), regardless of what the torso
- * part label says above that line.
- *
- * The centroid — a mean over every remaining garment pixel — is used
- * instead of a bounding box for graphic placement because a bounding box
- * is dominated by whichever single pixel is furthest out. `found: false`
- * means no person was detected — the caller should keep showing the last
- * good mask briefly rather than clearing it on a missed frame.
+ * Every measurement here (garment centroid, face centroid, both pixel
+ * counts) is a sum over every matching pixel, deliberately never a raw
+ * min/max: an early version used the single lowest face-labeled pixel as
+ * the cutoff reference and one stray pixel (a hand raised into frame,
+ * mistaken for skin) dragged that cutoff down across most of the shirt.
+ * A mean is barely moved by a handful of outliers; that's the whole reason
+ * to use one here.
  */
 export async function segmentGarmentMask(
   net: BodyPix,
@@ -100,17 +99,18 @@ export async function segmentGarmentMask(
   maskCanvas.width = result.width;
   maskCanvas.height = result.height;
 
-  let faceMinY = Infinity;
-  let faceMaxY = -Infinity;
+  let faceSumY = 0;
+  let facePixelCount = 0;
   for (let i = 0; i < result.data.length; i++) {
     if (FACE_PART_IDS.has(result.data[i])) {
-      const y = Math.floor(i / result.width);
-      if (y < faceMinY) faceMinY = y;
-      if (y > faceMaxY) faceMaxY = y;
+      faceSumY += Math.floor(i / result.width);
+      facePixelCount++;
     }
   }
   const cutoffY =
-    faceMaxY > -Infinity ? faceMaxY + (faceMaxY - faceMinY) * NECK_ALLOWANCE_FACTOR : -Infinity;
+    facePixelCount > 0
+      ? faceSumY / facePixelCount + Math.sqrt(facePixelCount) * (FACE_BOTTOM_FACTOR + NECK_ALLOWANCE_FACTOR)
+      : -Infinity;
 
   const imageData = ctx.createImageData(result.width, result.height);
   let sumX = 0;

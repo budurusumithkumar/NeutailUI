@@ -64,6 +64,16 @@ export function estimateTorso(pose: Pose): TorsoPose | null {
       ? { x: (leftHip.x + rightHip.x) / 2, y: (leftHip.y + rightHip.y) / 2 }
       : null;
 
+  // `left_shoulder`/`right_shoulder` are anatomical labels from the subject's own
+  // perspective, not screen-left/screen-right — for someone facing the camera in
+  // the raw (unmirrored) frame, their anatomical right shoulder normally has the
+  // *smaller* x. Using rightShoulder/leftShoulder directly for the angle made dx
+  // negative for a normal upright pose, so atan2 returned ~±180° and rotated the
+  // shirt upside down. Pick screen-left/screen-right by actual x position instead,
+  // so dx is always >= 0 and the angle stays a sane near-horizontal tilt.
+  const screenLeft = leftShoulder.x <= rightShoulder.x ? leftShoulder : rightShoulder;
+  const screenRight = leftShoulder.x <= rightShoulder.x ? rightShoulder : leftShoulder;
+
   return {
     shoulderMid: {
       x: (leftShoulder.x + rightShoulder.x) / 2,
@@ -71,7 +81,7 @@ export function estimateTorso(pose: Pose): TorsoPose | null {
     },
     shoulderWidth: Math.hypot(rightShoulder.x - leftShoulder.x, rightShoulder.y - leftShoulder.y),
     hipMid,
-    angle: Math.atan2(rightShoulder.y - leftShoulder.y, rightShoulder.x - leftShoulder.x),
+    angle: Math.atan2(screenRight.y - screenLeft.y, screenRight.x - screenLeft.x),
   };
 }
 

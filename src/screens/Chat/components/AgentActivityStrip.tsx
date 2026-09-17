@@ -14,6 +14,15 @@ const statusClass: Record<AgentStatus, string> = {
   SKIPPED: "text-neutral-400",
 };
 
+function formatAgentName(agent: string): string {
+  return agent
+    .replace(/agent$/i, "")
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") + " Agent";
+}
+
 export function AgentActivityStrip({ activity }: { activity: AgentActivity[] }) {
   if (activity.length === 0) return null;
 
@@ -23,7 +32,7 @@ export function AgentActivityStrip({ activity }: { activity: AgentActivity[] }) 
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-400">
       {activity.map((entry) => (
         <span key={entry.agent} className={statusClass[entry.status]}>
-          {statusIcon[entry.status]} {entry.agent}
+          {statusIcon[entry.status]} {formatAgentName(entry.agent)}
         </span>
       ))}
       {hasFailure && <span className="text-rose-600">Partial response</span>}

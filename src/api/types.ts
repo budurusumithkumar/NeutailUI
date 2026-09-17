@@ -1,5 +1,5 @@
-// Mirrors components/schemas in ../../NeuTail_Mission4_UI_Backend_OpenAPI.json 1:1.
-// Field names/nullability are kept identical to the contract so a schema diff is easy to spot.
+// Most types mirror the checked-in OpenAPI schemas. ChatResponse is the stable UI model
+// produced by chatResponseAdapter because the live orchestrator returns a richer wire shape.
 
 export type Role = "customer" | "stylist" | "admin";
 
@@ -85,15 +85,35 @@ export interface FitResult {
   explanation?: string | null;
 }
 
-export type UpsellAction = "PRESENT_OFFER" | "NO_OFFER";
+export type UpsellStatus = "OFFER_AVAILABLE" | "NO_OFFER" | "FAILED";
+export type OpportunityBand = "LOW" | "MEDIUM" | "HIGH";
+export type ServiceOfferType =
+  | "STYLING_ADVISORY"
+  | "STYLE_PLUS_TRIAL"
+  | "STYLE_PLUS";
+
+export interface ServiceOffer {
+  offer_type: ServiceOfferType | string;
+  title: string;
+  description?: string | null;
+  requires_explicit_consent: boolean;
+  priority?: number;
+}
 
 export interface UpsellResult {
-  eligible?: boolean;
-  action?: UpsellAction;
-  service_code?: string | null;
-  service_name?: string | null;
+  status: UpsellStatus;
+  should_offer: boolean;
+  offer?: ServiceOffer | null;
+  opportunity_score?: number | null;
+  opportunity_band?: OpportunityBand | null;
+  eligibility_reasons: string[];
+  suppression_reasons: string[];
   message?: string | null;
-  reason_codes?: string[];
+  requires_customer_consent: boolean;
+  decision_id?: string | null;
+  trigger_type?: string | null;
+  trigger_strength?: number | null;
+  llm_invoked?: boolean | null;
 }
 
 export type AgentStatus = "STARTED" | "COMPLETED" | "FAILED" | "SKIPPED";

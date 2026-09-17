@@ -5,9 +5,11 @@ import type {
   ChatResponse,
   CustomerContextSummary,
   FitResult,
+  OpportunityBand,
   ProductCard,
   RiskBand,
-  UpsellAction,
+  ServiceOffer,
+  UpsellStatus,
   UpsellResult,
 } from "./types";
 
@@ -29,7 +31,12 @@ const agentStatuses = new Set<AgentStatus>([
 ]);
 
 const riskBands = new Set<RiskBand>(["LOW", "MEDIUM", "HIGH"]);
-const upsellActions = new Set<UpsellAction>(["PRESENT_OFFER", "NO_OFFER"]);
+const opportunityBands = new Set<OpportunityBand>(["LOW", "MEDIUM", "HIGH"]);
+const upsellStatuses = new Set<UpsellStatus>([
+  "OFFER_AVAILABLE",
+  "NO_OFFER",
+  "FAILED",
+]);
 
 function asRecord(value: unknown): UnknownRecord | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -132,21 +139,87 @@ function normalizeFit(value: unknown): FitResult | null {
   };
 }
 
-function normalizeUpsell(value: unknown): UpsellResult | null {
+function normalizeOffer(upsell: UnknownRecord): ServiceOffer | null {
+  const nestedOffer = asRecord(upsell.offer);
+  const offerType =
+    asString(nestedOffer?.offer_type) ??
+    asString(upsell.service_code) ??
+    asString(upsell.selected_offer);
+  const title = asString(nestedOffer?.title) ?? asString(upsell.service_name);
+
+  if (!offerType && !title) return null;
+
+  return {
+    offer_type: offerType ?? "SERVICE_OFFER",
+    title: title ?? offerType?.replaceAll("_", " ").toLowerCase() ?? "Neu.Tail service",
+    description: asNullableString(nestedOffer?.description),
+    requires_explicit_consent:
+      typeof nestedOffer?.requires_explicit_consent === "boolean"
+        ? nestedOffer.requires_explicit_consent
+        : true,
+    priority: asNumber(nestedOffer?.priority),
+  };
+}
+
+function normalizeUpsell(
+  value: unknown,
+  response?: UnknownRecord,
+): UpsellResult | null {
   const upsell = asRecord(value);
   if (!upsell) return null;
 
-  const action = asString(upsell.action);
+  const legacyAction = asString(upsell.action);
+  const explicitShouldOffer =
+    typeof upsell.should_offer === "boolean" ? upsell.should_offer : undefined;
+  const shouldOffer =
+    explicitShouldOffer ??
+    (typeof upsell.eligible === "boolean"
+      ? upsell.eligible && legacyAction !== "NO_OFFER"
+      : legacyAction === "PRESENT_OFFER");
+
+  const rawStatus = asString(upsell.status);
+  const status =
+    rawStatus && upsellStatuses.has(rawStatus as UpsellStatus)
+      ? (rawStatus as UpsellStatus)
+      : shouldOffer
+        ? "OFFER_AVAILABLE"
+        : "NO_OFFER";
+
+  const rawOpportunityBand = asString(upsell.opportunity_band);
+  const trigger =
+    asRecord(upsell.trigger) ??
+    asRecord(response?.upsell_trigger) ??
+    asRecord(response?.trigger);
+
   return {
-    eligible: typeof upsell.eligible === "boolean" ? upsell.eligible : undefined,
-    action:
-      action && upsellActions.has(action as UpsellAction)
-        ? (action as UpsellAction)
-        : undefined,
-    service_code: asNullableString(upsell.service_code),
-    service_name: asNullableString(upsell.service_name),
+    status,
+    should_offer: shouldOffer && status === "OFFER_AVAILABLE",
+    offer: normalizeOffer(upsell),
+    opportunity_score: asNumber(upsell.opportunity_score) ?? null,
+    opportunity_band:
+      rawOpportunityBand &&
+      opportunityBands.has(rawOpportunityBand as OpportunityBand)
+        ? (rawOpportunityBand as OpportunityBand)
+        : null,
+    eligibility_reasons: asStringArray(
+      upsell.eligibility_reasons ?? upsell.reason_codes,
+    ),
+    suppression_reasons: asStringArray(upsell.suppression_reasons),
     message: asNullableString(upsell.message),
-    reason_codes: asStringArray(upsell.reason_codes),
+    requires_customer_consent:
+      typeof upsell.requires_customer_consent === "boolean"
+        ? upsell.requires_customer_consent
+        : true,
+    decision_id:
+      asNullableString(upsell.decision_id) ??
+      asNullableString(upsell.offer_instance_id),
+    trigger_type:
+      asNullableString(upsell.trigger_type) ??
+      asNullableString(trigger?.trigger_type),
+    trigger_strength:
+      asNumber(upsell.trigger_strength) ?? asNumber(trigger?.strength) ?? null,
+    llm_invoked:
+      typeof upsell.llm_invoked === "boolean" ? upsell.llm_invoked : null,
   };
 }
 
@@ -211,8 +284,15 @@ export function normalizeChatResponse(payload: unknown): ChatResponse {
       : "GENERAL_QUERY";
 
   const rawFit = response.fit !== undefined ? response.fit : response.fit_result;
+  const agentOutputs = asRecord(response.agent_outputs);
+  const upsellAgentOutput =
+    asRecord(agentOutputs?.upsell_agent) ?? asRecord(agentOutputs?.UpsellAgent);
   const rawUpsell =
-    response.upsell !== undefined ? response.upsell : response.upsell_result;
+    response.upsell !== undefined
+      ? response.upsell
+      : response.upsell_result !== undefined
+        ? response.upsell_result
+        : upsellAgentOutput?.upsell_result;
 
   return {
     trace_id: asString(response.trace_id) ?? "",
@@ -222,7 +302,7 @@ export function normalizeChatResponse(payload: unknown): ChatResponse {
     customer_context: normalizeCustomerContext(response.customer_context),
     products: normalizeProducts(response),
     fit: normalizeFit(rawFit),
-    upsell: normalizeUpsell(rawUpsell),
+    upsell: normalizeUpsell(rawUpsell, response),
     agent_activity: normalizeAgentActivity(response),
   };
 }

@@ -1,6 +1,6 @@
 # Data Models
 
-TypeScript types the frontend will use, mirrored 1:1 from `components/schemas` in the OpenAPI contract (field names/nullability preserved exactly, so a schema diff in the contract is easy to spot against this file). Plus the client-only Cart model, which has no backend equivalent yet (Gap #1).
+TypeScript types the frontend will use. Most mirror `components/schemas` in the checked-in OpenAPI contract. `ChatResponse` is the stable UI model produced by the response adapter because the live orchestrator response is richer than the current OpenAPI file. The cart model is client-only and has no backend equivalent yet (Gap #1).
 
 ## From the OpenAPI contract (`src/api/types.ts`)
 
@@ -83,14 +83,35 @@ export interface FitResult {
   explanation?: string | null;
 }
 
-export type UpsellAction = "PRESENT_OFFER" | "NO_OFFER";
+export type UpsellStatus = "OFFER_AVAILABLE" | "NO_OFFER" | "FAILED";
+export type OpportunityBand = "LOW" | "MEDIUM" | "HIGH";
+export type ServiceOfferType =
+  | "STYLING_ADVISORY"
+  | "STYLE_PLUS_TRIAL"
+  | "STYLE_PLUS";
+
+export interface ServiceOffer {
+  offer_type: ServiceOfferType | string;
+  title: string;
+  description?: string | null;
+  requires_explicit_consent: boolean;
+  priority?: number;
+}
+
 export interface UpsellResult {
-  eligible?: boolean;
-  action?: UpsellAction;
-  service_code?: string | null;
-  service_name?: string | null;
+  status: UpsellStatus;
+  should_offer: boolean;
+  offer?: ServiceOffer | null;
+  opportunity_score?: number | null;
+  opportunity_band?: OpportunityBand | null;
+  eligibility_reasons: string[];
+  suppression_reasons: string[];
   message?: string | null;
-  reason_codes?: string[];
+  requires_customer_consent: boolean;
+  decision_id?: string | null;
+  trigger_type?: string | null;
+  trigger_strength?: number | null;
+  llm_invoked?: boolean | null;
 }
 
 export type AgentStatus = "STARTED" | "COMPLETED" | "FAILED" | "SKIPPED";

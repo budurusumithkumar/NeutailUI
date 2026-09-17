@@ -2,13 +2,19 @@ import { isAxiosError } from "axios";
 import { useEffect, useRef, useState } from "react";
 import { postChat } from "../../api/chat";
 import { ensureSession } from "../../api/ensureSession";
-import type { ChatRequest, ErrorResponse, ProductCard as ProductCardType } from "../../api/types";
+import type {
+  ChatRequest,
+  ErrorResponse,
+  ProductCard as ProductCardType,
+  UpsellResult,
+} from "../../api/types";
 import { AppLayout } from "../../components/AppLayout";
 import { Button } from "../../components/Button";
 import { useToast } from "../../components/toastContext";
 import { useCartStore } from "../../cart/cartStore";
 import { ChatTurn } from "./components/ChatTurn";
 import { ProductDetailModal } from "./components/ProductDetailModal";
+import type { UpsellUserAction } from "./components/UpsellCard";
 import { loadTranscript, saveTranscript } from "./transcriptCache";
 import type { TranscriptEntry } from "./types";
 
@@ -31,6 +37,27 @@ async function runChat(payload: ChatRequest): Promise<TranscriptEntry> {
       retryPayload: payload,
     };
   }
+}
+
+function upsellActionMessage(
+  upsell: UpsellResult,
+  action: UpsellUserAction,
+): string {
+  const offerName =
+    upsell.offer?.title ??
+    upsell.offer?.offer_type.replaceAll("_", " ").toLowerCase() ??
+    "this service";
+
+  if (action === "DECLINED") {
+    return `No thanks, I don't want the ${offerName} offer.`;
+  }
+  if (action === "DISMISSED") {
+    return `Not right now for ${offerName}.`;
+  }
+  if (upsell.offer?.offer_type === "STYLING_ADVISORY") {
+    return `I'd like to use ${offerName}.`;
+  }
+  return `I'm interested in ${offerName}. Please show me the next steps; do not enroll me automatically.`;
 }
 
 export function ChatScreen() {
@@ -66,8 +93,8 @@ export function ChatScreen() {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
 
-  async function sendMessage(text: string, selectedSku: string | null) {
-    if (!sessionId || !text.trim()) return;
+  async function sendMessage(text: string, selectedSku: string | null): Promise<boolean> {
+    if (!sessionId || !text.trim()) return false;
 
     const userEntry: TranscriptEntry = { id: crypto.randomUUID(), kind: "user", text };
     setTranscript((current) => [...current, userEntry]);
@@ -78,6 +105,7 @@ export function ChatScreen() {
     const resultEntry = await runChat({ session_id: sessionId, message: text, selected_sku: selectedSku });
     setTranscript((current) => [...current, resultEntry]);
     setIsSending(false);
+    return resultEntry.kind === "assistant";
   }
 
   async function handleRetry(entryId: string, payload: ChatRequest) {
@@ -104,6 +132,13 @@ export function ChatScreen() {
     setDetailProduct(null);
     setPendingSku(product.sku);
     setInput(`Will this fit me in size ${product.available_sizes?.[0] ?? ""}?`.trim());
+  }
+
+  async function handleUpsellRespond(
+    upsell: UpsellResult,
+    action: UpsellUserAction,
+  ): Promise<boolean> {
+    return sendMessage(upsellActionMessage(upsell, action), null);
   }
 
   return (
@@ -134,6 +169,8 @@ export function ChatScreen() {
                   onAddToCart={handleAddToCart}
                   onAskFit={handleAskFit}
                   onOpenDetail={setDetailProduct}
+                  onUpsellRespond={handleUpsellRespond}
+                  upsellActionPending={isSending}
                 />
               );
             }
@@ -160,7 +197,7 @@ export function ChatScreen() {
           className="mt-2 flex gap-2 border-t border-neutral-200 pt-3"
           onSubmit={(event) => {
             event.preventDefault();
-            sendMessage(input, pendingSku);
+            void sendMessage(input, pendingSku);
           }}
         >
           <input

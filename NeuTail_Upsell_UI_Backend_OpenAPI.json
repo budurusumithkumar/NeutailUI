@@ -1,0 +1,847 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Neu.Tail Upsell UI Integration API",
+    "version": "1.0.0",
+    "description": "Additive API contract for the Neu.Tail upsell demo. Customer identity is always derived from the bearer token. OFFER_ACCEPTED records customer interest only and must not automatically start a trial or subscription."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local demo backend"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/v1/engagement/events": {
+      "post": {
+        "operationId": "recordEngagementEvent",
+        "summary": "Record product engagement and evaluate any resulting upsell trigger",
+        "description": "Records a trusted customer engagement event. For PRODUCT_VIEWED, the backend resolves product attributes from the SKU, updates engagement history, emits HIGH_PRODUCT_ENGAGEMENT when deterministic thresholds are met, and routes the trigger through the Orchestrator. The frontend must not decide whether a product is premium or whether the customer is eligible.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EngagementEventInput"
+              },
+              "example": {
+                "session_id": "Sa86196cc19c84643947e2eba7f497210",
+                "event_type": "PRODUCT_VIEWED",
+                "sku": "SKU00123",
+                "idempotency_key": "Sa86196cc19c84643947e2eba7f497210-SKU00123-view-3",
+                "metadata": {
+                  "source": "PRODUCT_DETAIL"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event recorded. upsell_result is present when an upsell evaluation ran.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementEventResponse"
+                },
+                "examples": {
+                  "offerAvailable": {
+                    "summary": "Third premium-product view produces an offer",
+                    "value": {
+                      "event_id": "EVT123",
+                      "recorded": true,
+                      "engagement_count": 3,
+                      "trigger": {
+                        "trigger_type": "HIGH_PRODUCT_ENGAGEMENT",
+                        "source_agent": "DiscoveryAgent",
+                        "sku": "SKU00123",
+                        "strength": 0.91,
+                        "metadata": {
+                          "view_count": 3
+                        }
+                      },
+                      "trace_id": "trace-upsell-positive",
+                      "upsell_result": {
+                        "status": "OFFER_AVAILABLE",
+                        "should_offer": true,
+                        "offer": {
+                          "offer_type": "STYLE_PLUS_TRIAL",
+                          "title": "Try Style+",
+                          "description": "A more personalized styling experience.",
+                          "requires_explicit_consent": true,
+                          "priority": 10
+                        },
+                        "opportunity_score": 0.87,
+                        "opportunity_band": "HIGH",
+                        "eligibility_reasons": [
+                          "HIGH_PRODUCT_ENGAGEMENT",
+                          "HIGH_PREMIUM_AFFINITY",
+                          "PRESTIGE_CHAMPION"
+                        ],
+                        "suppression_reasons": [],
+                        "message": "Would you like to explore the Style+ styling experience?",
+                        "requires_customer_consent": true,
+                        "decision_id": "UPSELL-123",
+                        "trigger": {
+                          "trigger_type": "HIGH_PRODUCT_ENGAGEMENT",
+                          "source_agent": "DiscoveryAgent",
+                          "sku": "SKU00123",
+                          "strength": 0.91,
+                          "metadata": {
+                            "view_count": 3
+                          }
+                        },
+                        "llm_invoked": true
+                      }
+                    }
+                  },
+                  "recordedWithoutTrigger": {
+                    "summary": "View recorded below the engagement threshold",
+                    "value": {
+                      "event_id": "EVT122",
+                      "recorded": true,
+                      "engagement_count": 2,
+                      "trigger": null,
+                      "trace_id": "trace-engagement-only",
+                      "upsell_result": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "The idempotency key was already used with a different payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/upsell/decisions/{decision_id}/events": {
+      "post": {
+        "operationId": "recordUpsellDecisionEvent",
+        "summary": "Record an explicit customer response to an upsell offer",
+        "description": "Records ACCEPTED, DECLINED, or DISMISSED only after an explicit UI action. OFFER_ACCEPTED means interest was recorded; it does not enroll the customer, begin a trial, create a subscription, or perform a financial transaction.",
+        "parameters": [
+          {
+            "name": "decision_id",
+            "in": "path",
+            "required": true,
+            "description": "Stable identifier returned with the original upsell decision.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsellDecisionEventInput"
+              },
+              "example": {
+                "session_id": "Sa86196cc19c84643947e2eba7f497210",
+                "event_type": "OFFER_ACCEPTED",
+                "idempotency_key": "UPSELL-123-OFFER_ACCEPTED"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer response recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsellDecisionEventResponse"
+                },
+                "example": {
+                  "recorded": true,
+                  "decision_id": "UPSELL-123",
+                  "event_type": "OFFER_ACCEPTED",
+                  "state": "INTEREST_RECORDED",
+                  "message": "Your interest has been recorded."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Upsell decision not found for the authenticated customer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The decision is already resolved or the idempotency key conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "operationId": "chatWithUpsellResult",
+        "summary": "Existing chat operation enriched with an optional upsell result",
+        "description": "This operation documents the upsell-specific extension to the existing chat endpoint. The orchestrator may include upsell_result for OFFER_AVAILABLE, NO_OFFER, or FAILED. A governed NO_OFFER result should be returned as an object, rather than null, when the UpsellAgent ran so demo diagnostics can show suppression without rendering a customer-facing offer.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chat response with optional governed upsell result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsellAwareChatResponse"
+                },
+                "examples": {
+                  "stylingAdvisory": {
+                    "summary": "Fit-risk handoff to Styling Advisory",
+                    "value": {
+                      "trace_id": "trace-fit-upsell",
+                      "session_id": "Sa86196cc19c84643947e2eba7f497210",
+                      "response": "I can also offer some personalized help with fit and styling.",
+                      "intent": "FIT_QUERY",
+                      "upsell_result": {
+                        "status": "OFFER_AVAILABLE",
+                        "should_offer": true,
+                        "offer": {
+                          "offer_type": "STYLING_ADVISORY",
+                          "title": "Personal Styling Advisory",
+                          "description": "Get personalized style and fit guidance.",
+                          "requires_explicit_consent": true,
+                          "priority": 20
+                        },
+                        "opportunity_score": 0.82,
+                        "opportunity_band": "HIGH",
+                        "eligibility_reasons": [
+                          "CHRONIC_FIT_RISK"
+                        ],
+                        "suppression_reasons": [],
+                        "message": "Would you like personalized help choosing the right size?",
+                        "requires_customer_consent": true,
+                        "decision_id": "UPSELL-456",
+                        "trigger": {
+                          "trigger_type": "CHRONIC_FIT_RISK",
+                          "source_agent": "FitAgent",
+                          "sku": "SKU00123",
+                          "strength": 0.82,
+                          "metadata": {}
+                        },
+                        "llm_invoked": true
+                      },
+                      "execution_plan": [
+                        "fit_agent",
+                        "upsell_agent"
+                      ],
+                      "completed_agents": [
+                        "fit_agent",
+                        "upsell_agent"
+                      ],
+                      "errors": []
+                    }
+                  },
+                  "suppressedRecentDecline": {
+                    "summary": "Recent Style+ decline suppresses the offer and skips the LLM",
+                    "value": {
+                      "trace_id": "trace-upsell-suppressed",
+                      "session_id": "Sa86196cc19c84643947e2eba7f497210",
+                      "response": "How else can I help with your shopping today?",
+                      "intent": "SERVICE_QUERY",
+                      "upsell_result": {
+                        "status": "NO_OFFER",
+                        "should_offer": false,
+                        "offer": null,
+                        "opportunity_score": 0,
+                        "opportunity_band": null,
+                        "eligibility_reasons": [],
+                        "suppression_reasons": [
+                          "RECENT_STYLE_PLUS_DECLINE"
+                        ],
+                        "message": null,
+                        "requires_customer_consent": true,
+                        "decision_id": "UPSELL-789",
+                        "trigger": {
+                          "trigger_type": "HIGH_PRODUCT_ENGAGEMENT",
+                          "source_agent": "DiscoveryAgent",
+                          "sku": "SKU00123",
+                          "strength": 0.91,
+                          "metadata": {
+                            "view_count": 3
+                          }
+                        },
+                        "llm_invoked": false
+                      },
+                      "execution_plan": [
+                        "upsell_agent"
+                      ],
+                      "completed_agents": [
+                        "upsell_agent"
+                      ],
+                      "errors": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "ChatRequest": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "message"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "selected_sku": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "EngagementEventType": {
+        "type": "string",
+        "enum": [
+          "PRODUCT_VIEWED"
+        ]
+      },
+      "EngagementEventInput": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "event_type",
+          "sku",
+          "idempotency_key"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/EngagementEventType"
+          },
+          "sku": {
+            "type": "string",
+            "minLength": 1
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "default": {}
+          }
+        },
+        "additionalProperties": false
+      },
+      "EngagementEventResponse": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "recorded",
+          "engagement_count",
+          "trigger",
+          "trace_id",
+          "upsell_result"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "recorded": {
+            "type": "boolean"
+          },
+          "engagement_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "trigger": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UpsellTrigger"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trace_id": {
+            "type": "string"
+          },
+          "upsell_result": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UpsellResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpsellTriggerType": {
+        "type": "string",
+        "enum": [
+          "HIGH_PRODUCT_ENGAGEMENT",
+          "PREMIUM_PRODUCT_INTEREST",
+          "CART_ABANDONMENT",
+          "CHRONIC_FIT_RISK",
+          "STYLING_ENGAGEMENT",
+          "LOYALTY_THRESHOLD_REACHED"
+        ]
+      },
+      "UpsellTrigger": {
+        "type": "object",
+        "required": [
+          "trigger_type",
+          "source_agent",
+          "metadata"
+        ],
+        "properties": {
+          "trigger_type": {
+            "$ref": "#/components/schemas/UpsellTriggerType"
+          },
+          "source_agent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sku": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "strength": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "default": {}
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServiceOfferType": {
+        "type": "string",
+        "enum": [
+          "STYLING_ADVISORY",
+          "STYLE_PLUS_TRIAL",
+          "STYLE_PLUS"
+        ]
+      },
+      "ServiceOffer": {
+        "type": "object",
+        "required": [
+          "offer_type",
+          "title",
+          "requires_explicit_consent",
+          "priority"
+        ],
+        "properties": {
+          "offer_type": {
+            "$ref": "#/components/schemas/ServiceOfferType"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requires_explicit_consent": {
+            "type": "boolean",
+            "const": true
+          },
+          "priority": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpsellStatus": {
+        "type": "string",
+        "enum": [
+          "OFFER_AVAILABLE",
+          "NO_OFFER",
+          "FAILED"
+        ]
+      },
+      "OpportunityBand": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "LOW",
+          "MEDIUM",
+          "HIGH",
+          null
+        ]
+      },
+      "UpsellResult": {
+        "type": "object",
+        "required": [
+          "status",
+          "should_offer",
+          "offer",
+          "opportunity_score",
+          "opportunity_band",
+          "eligibility_reasons",
+          "suppression_reasons",
+          "message",
+          "requires_customer_consent",
+          "decision_id",
+          "trigger",
+          "llm_invoked"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/UpsellStatus"
+          },
+          "should_offer": {
+            "type": "boolean"
+          },
+          "offer": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ServiceOffer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opportunity_score": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "opportunity_band": {
+            "$ref": "#/components/schemas/OpportunityBand"
+          },
+          "eligibility_reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "suppression_reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requires_customer_consent": {
+            "type": "boolean",
+            "const": true
+          },
+          "decision_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/UpsellTrigger"
+          },
+          "llm_invoked": {
+            "type": "boolean",
+            "description": "Must be false for NO_OFFER. Included so the demo can prove the governed no-LLM path."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpsellDecisionEventType": {
+        "type": "string",
+        "enum": [
+          "OFFER_ACCEPTED",
+          "OFFER_DECLINED",
+          "OFFER_DISMISSED"
+        ]
+      },
+      "UpsellDecisionEventInput": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "event_type",
+          "idempotency_key"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/UpsellDecisionEventType"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpsellDecisionState": {
+        "type": "string",
+        "enum": [
+          "INTEREST_RECORDED",
+          "DECLINE_RECORDED",
+          "DISMISSAL_RECORDED"
+        ]
+      },
+      "UpsellDecisionEventResponse": {
+        "type": "object",
+        "required": [
+          "recorded",
+          "decision_id",
+          "event_type",
+          "state",
+          "message"
+        ],
+        "properties": {
+          "recorded": {
+            "type": "boolean"
+          },
+          "decision_id": {
+            "type": "string"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/UpsellDecisionEventType"
+          },
+          "state": {
+            "$ref": "#/components/schemas/UpsellDecisionState"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpsellAwareChatResponse": {
+        "type": "object",
+        "required": [
+          "trace_id",
+          "session_id",
+          "response",
+          "intent",
+          "execution_plan",
+          "completed_agents",
+          "errors"
+        ],
+        "properties": {
+          "trace_id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "response": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "PRODUCT_DISCOVERY",
+              "FIT_QUERY",
+              "SERVICE_QUERY",
+              "GENERAL_QUERY",
+              "CLARIFICATION"
+            ]
+          },
+          "upsell_result": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UpsellResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "execution_plan": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "completed_agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {}
+          }
+        },
+        "additionalProperties": true
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "properties": {
+          "error_code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "details": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid bearer token.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Unexpected server failure. Commercial eligibility must fail closed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    }
+  }
+}

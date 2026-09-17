@@ -21,8 +21,8 @@
 3. Response `intent: "FIT_QUERY"` includes `fit` (risk band, recommended size, explanation) → render a fit card inline in the transcript; if `risk_band` is `HIGH`, visually flag it (e.g. amber/red accent) rather than a plain success card.
 
 ## Flow D — Upsell
-1. Any chat turn may include `upsell` (e.g. after adding a formal dress, an alterations service). Render as a distinct, dismissible card ("Neu.Tail Concierge") separate from product cards — it is a service offer, not a product.
-2. Accepting/dismissing an upsell is UI-only for now (no endpoint to record the decision) — track it client-side so the same offer doesn't repeat within the session (dedupe on `service_code`).
+1. Any chat turn may include `upsell` (e.g. Styling Advisory or a Style+ trial). Render `OFFER_AVAILABLE` as a distinct, dismissible, consent-first card separate from product cards. Never render a customer-facing card for `NO_OFFER` or `FAILED`.
+2. Accepting, declining, or dismissing is explicit customer action. Until the backend publishes a dedicated offer-event endpoint, the UI sends the choice as a follow-up chat turn and persists the resolved state within the session (deduped by `decision_id` or offer type). The UI never claims that a subscription or trial started automatically.
 
 ## Flow E — Cart review
 1. User opens **Cart** (from Home widget, header icon, or nav).

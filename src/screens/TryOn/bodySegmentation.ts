@@ -40,25 +40,32 @@ const SEGMENTATION_CONFIG = {
   maxDetections: 1,
 } as const;
 
-export interface GarmentBounds {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
+export interface GarmentCentroid {
+  x: number;
+  y: number;
+  /** Count of garment pixels — sqrt(pixelCount) is a stable size proxy for
+   * placing pattern graphics, since it scales smoothly with how much of the
+   * frame the garment fills (closer/farther) without a bounding box's
+   * sensitivity to a few stray misclassified pixels. */
+  pixelCount: number;
 }
 
 export interface GarmentSegmentation {
   found: boolean;
-  bounds: GarmentBounds | null;
+  centroid: GarmentCentroid | null;
 }
 
 /**
  * Runs part segmentation and writes a torso/upper-arm alpha mask into
  * `maskCanvas` (opaque white where the garment region is, transparent
- * elsewhere) at the video's native resolution, plus that region's bounding
- * box (used to place pattern graphics sensibly). `found: false` means no
- * person was detected — the caller should keep showing the last good mask
- * briefly rather than clearing it on a single missed frame.
+ * elsewhere) at the video's native resolution, plus that region's centroid
+ * (used to place pattern graphics). The centroid — a mean over every garment
+ * pixel — is used instead of a bounding box specifically because a bounding
+ * box is dominated by whichever single pixel is furthest out; a handful of
+ * misclassified pixels near the neck previously dragged the whole box (and
+ * the graphic placed from it) up toward the face and inflated its size.
+ * `found: false` means no person was detected — the caller should keep
+ * showing the last good mask briefly rather than clearing it on a missed frame.
  */
 export async function segmentGarmentMask(
   net: BodyPix,
@@ -67,17 +74,15 @@ export async function segmentGarmentMask(
 ): Promise<GarmentSegmentation> {
   const result = await net.segmentPersonParts(video, SEGMENTATION_CONFIG);
   const ctx = maskCanvas.getContext("2d");
-  if (!ctx) return { found: false, bounds: null };
+  if (!ctx) return { found: false, centroid: null };
 
   maskCanvas.width = result.width;
   maskCanvas.height = result.height;
 
   const imageData = ctx.createImageData(result.width, result.height);
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  let found = false;
+  let sumX = 0;
+  let sumY = 0;
+  let pixelCount = 0;
 
   for (let y = 0; y < result.height; y++) {
     for (let x = 0; x < result.width; x++) {
@@ -89,15 +94,18 @@ export async function segmentGarmentMask(
       imageData.data[offset + 2] = 255;
       imageData.data[offset + 3] = isGarment ? 255 : 0;
       if (isGarment) {
-        found = true;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
+        sumX += x;
+        sumY += y;
+        pixelCount++;
       }
     }
   }
 
   ctx.putImageData(imageData, 0, 0);
-  return { found, bounds: found ? { minX, minY, maxX, maxY } : null };
+  if (pixelCount === 0) return { found: false, centroid: null };
+
+  return {
+    found: true,
+    centroid: { x: sumX / pixelCount, y: sumY / pixelCount, pixelCount },
+  };
 }

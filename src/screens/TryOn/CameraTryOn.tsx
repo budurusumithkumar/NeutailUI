@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/Button";
 import type { BodyPix } from "@tensorflow-models/body-pix";
 import { loadBodySegmenter, segmentGarmentMask } from "./bodySegmentation";
-import type { GarmentBounds } from "./bodySegmentation";
+import type { GarmentCentroid } from "./bodySegmentation";
 import { drawGarmentFill } from "./drawGarmentFill";
 import type { TshirtItem } from "./tshirts";
 
@@ -44,7 +44,7 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
   const maskCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
   const fillCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
   const softCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
-  const boundsRef = useRef<GarmentBounds | null>(null);
+  const centroidRef = useRef<GarmentCentroid | null>(null);
   const itemRef = useRef(item);
 
   const [state, setState] = useState<CameraState>("idle");
@@ -102,7 +102,7 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
         fillCanvas.width = canvas.width;
         fillCanvas.height = canvas.height;
         fillCtx.clearRect(0, 0, fillCanvas.width, fillCanvas.height);
-        drawGarmentFill(fillCtx, itemRef.current, fillCanvas.width, fillCanvas.height, boundsRef.current);
+        drawGarmentFill(fillCtx, itemRef.current, fillCanvas.width, fillCanvas.height, centroidRef.current);
 
         fillCtx.globalCompositeOperation = "destination-in";
         fillCtx.filter = "blur(3px)";
@@ -129,7 +129,7 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
       try {
         const result = await segmentGarmentMask(net, video, maskCanvasRef.current);
         if (result.found) {
-          boundsRef.current = result.bounds;
+          centroidRef.current = result.centroid;
         }
         if (result.found !== lastVisible) {
           lastVisible = result.found;

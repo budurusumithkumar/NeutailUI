@@ -38,12 +38,22 @@ export function ChatTurn({
   const agentActivity = response.agent_activity ?? [];
   const showUpsell =
     response.upsell?.status === "OFFER_AVAILABLE" && response.upsell.should_offer;
+  const showDecisionDetails = showUpsellDecisionDetails && Boolean(response.upsell);
+  const hasCustomerContent =
+    Boolean(response.message.trim()) ||
+    products.length > 0 ||
+    Boolean(response.fit) ||
+    Boolean(showUpsell);
+
+  if (!hasCustomerContent && !showDecisionDetails) return null;
 
   return (
     <div className="max-w-[85%] space-y-3">
-      <div className="inline-block rounded-2xl bg-neutral-100 px-4 py-2.5 text-sm">
-        {response.message}
-      </div>
+      {response.message.trim() && (
+        <div className="inline-block rounded-2xl bg-neutral-100 px-4 py-2.5 text-sm">
+          {response.message}
+        </div>
+      )}
 
       {products.length > 0 && (
         <div className="flex gap-3 overflow-x-auto pb-1">
@@ -71,7 +81,7 @@ export function ChatTurn({
         />
       )}
 
-      {showUpsellDecisionDetails && response.upsell && (
+      {showDecisionDetails && response.upsell && (
         <UpsellDecisionDetails upsell={response.upsell} traceId={response.trace_id} />
       )}
 

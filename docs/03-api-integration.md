@@ -1,6 +1,6 @@
 # API Integration Map
 
-Source of truth: [`NeuTail_Mission4_UI_Backend_OpenAPI.json`](../NeuTail_Mission4_UI_Backend_OpenAPI.json). This file maps every screen/action to a concrete operation, and calls out where the contract has gaps the frontend must design around.
+Sources of truth: [`NeuTail_Mission4_UI_Backend_OpenAPI.json`](../NeuTail_Mission4_UI_Backend_OpenAPI.json) and the additive [`NeuTail_Upsell_UI_Backend_OpenAPI.json`](../NeuTail_Upsell_UI_Backend_OpenAPI.json). This file maps every screen/action to a concrete operation and calls out where the contracts have gaps the frontend must design around.
 
 | Screen / Action | Operation | Notes |
 |---|---|---|
@@ -11,6 +11,8 @@ Source of truth: [`NeuTail_Mission4_UI_Backend_OpenAPI.json`](../NeuTail_Mission
 | Chat reload / resume | `getSessionContext` (`GET /api/v1/sessions/{id}/context`) | Rehydrates intent/selected_sku/etc., **not** message history (Gap #2). |
 | Close/leave chat (optional) | `closeSession` (`DELETE /api/v1/sessions/{id}`) | Optional — call on explicit "end conversation", not on every navigation away. |
 | Send chat message | `chat` (`POST /api/v1/chat`) | **Never include `customer_id`** — identity is derived from the JWT server-side; the request type in the API client should not even have that field. |
+| Open product detail | `recordEngagementEvent` (`POST /api/v1/engagement/events`) | Records `PRODUCT_VIEWED`; a threshold-crossing response may contain an `upsell_result`. Product premium status and eligibility are resolved server-side. |
+| Respond to upsell | `recordUpsellDecisionEvent` (`POST /api/v1/upsell/decisions/{decision_id}/events`) | Records explicit accepted, declined, or dismissed actions. Acceptance records interest only and never starts a subscription automatically. |
 | Home personalization | `getCustomerSummary` (`GET /api/v1/customers/me/summary`) | Also reused read-only on Profile. |
 | Health/status (ops only) | `health` (`GET /health`) | Not user-facing; useful for a build-time smoke check / status page if ever needed. |
 

@@ -2,10 +2,17 @@ import { isAxiosError } from "axios";
 import { useEffect, useRef, useState } from "react";
 import { postChat } from "../../api/chat";
 import { ensureSession } from "../../api/ensureSession";
+import {
+  recordProductView,
+  recordUpsellDecisionEvent,
+} from "../../api/upsell";
 import type {
+  AgentActivity,
   ChatRequest,
+  EngagementEventResponse,
   ErrorResponse,
   ProductCard as ProductCardType,
+  UpsellDecisionEventType,
   UpsellResult,
 } from "../../api/types";
 import { AppLayout } from "../../components/AppLayout";
@@ -60,6 +67,47 @@ function upsellActionMessage(
   return `I'm interested in ${offerName}. Please show me the next steps; do not enroll me automatically.`;
 }
 
+const upsellEventType: Record<UpsellUserAction, UpsellDecisionEventType> = {
+  ACCEPTED: "OFFER_ACCEPTED",
+  DECLINED: "OFFER_DECLINED",
+  DISMISSED: "OFFER_DISMISSED",
+};
+
+function engagementUpsellEntry(
+  engagement: EngagementEventResponse,
+  sessionId: string,
+): TranscriptEntry | null {
+  const upsell = engagement.upsell_result;
+  if (!upsell) return null;
+
+  const agents = [engagement.trigger?.source_agent, "upsell_agent"].filter(
+    (agent, index, all): agent is string => Boolean(agent) && all.indexOf(agent) === index,
+  );
+  const agentActivity: AgentActivity[] = agents.map((agent) => ({
+    agent,
+    status:
+      agent === "upsell_agent" && upsell.status === "FAILED"
+        ? "FAILED"
+        : "COMPLETED",
+    duration_ms: null,
+  }));
+
+  return {
+    id: crypto.randomUUID(),
+    kind: "assistant",
+    response: {
+      trace_id: engagement.trace_id,
+      session_id: sessionId,
+      intent: "SERVICE_QUERY",
+      message: "",
+      products: [],
+      fit: null,
+      upsell,
+      agent_activity: agentActivity,
+    },
+  };
+}
+
 export function ChatScreen() {
   const { showToast } = useToast();
   const addToCart = useCartStore((state) => state.addItem);
@@ -69,6 +117,7 @@ export function ChatScreen() {
   const [input, setInput] = useState("");
   const [pendingSku, setPendingSku] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [isRecordingUpsellAction, setIsRecordingUpsellAction] = useState(false);
   const [detailProduct, setDetailProduct] = useState<ProductCardType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
@@ -102,7 +151,11 @@ export function ChatScreen() {
     setPendingSku(null);
     setIsSending(true);
 
-    const resultEntry = await runChat({ session_id: sessionId, message: text, selected_sku: selectedSku });
+    const resultEntry = await runChat({
+      session_id: sessionId,
+      message: text,
+      selected_sku: selectedSku,
+    });
     setTranscript((current) => [...current, resultEntry]);
     setIsSending(false);
     return resultEntry.kind === "assistant";
@@ -134,11 +187,59 @@ export function ChatScreen() {
     setInput(`Will this fit me in size ${product.available_sizes?.[0] ?? ""}?`.trim());
   }
 
+  function handleOpenDetail(product: ProductCardType) {
+    setDetailProduct(product);
+    if (!sessionId) return;
+
+    void recordProductView(sessionId, product.sku)
+      .then((engagement) => {
+        const entry = engagementUpsellEntry(engagement, sessionId);
+        if (!entry || entry.kind !== "assistant") return;
+
+        setTranscript((current) => {
+          const decisionId = entry.response.upsell?.decision_id;
+          const alreadyPresent = current.some(
+            (item) =>
+              item.kind === "assistant" &&
+              ((engagement.trace_id &&
+                item.response.trace_id === engagement.trace_id) ||
+                (decisionId && item.response.upsell?.decision_id === decisionId)),
+          );
+          return alreadyPresent ? current : [...current, entry];
+        });
+      })
+      .catch((error: unknown) => {
+        showToast(extractErrorMessage(error), "error");
+      });
+  }
+
   async function handleUpsellRespond(
     upsell: UpsellResult,
     action: UpsellUserAction,
   ): Promise<boolean> {
-    return sendMessage(upsellActionMessage(upsell, action), null);
+    if (!sessionId) return false;
+
+    if (!upsell.decision_id) {
+      return sendMessage(upsellActionMessage(upsell, action), null);
+    }
+
+    setIsRecordingUpsellAction(true);
+    try {
+      const result = await recordUpsellDecisionEvent(
+        upsell.decision_id,
+        sessionId,
+        upsellEventType[action],
+      );
+      if (result.recorded && result.message) {
+        showToast(result.message);
+      }
+      return result.recorded;
+    } catch (error) {
+      showToast(extractErrorMessage(error), "error");
+      return false;
+    } finally {
+      setIsRecordingUpsellAction(false);
+    }
   }
 
   return (
@@ -168,9 +269,9 @@ export function ChatScreen() {
                   response={entry.response}
                   onAddToCart={handleAddToCart}
                   onAskFit={handleAskFit}
-                  onOpenDetail={setDetailProduct}
+                  onOpenDetail={handleOpenDetail}
                   onUpsellRespond={handleUpsellRespond}
-                  upsellActionPending={isSending}
+                  upsellActionPending={isSending || isRecordingUpsellAction}
                 />
               );
             }

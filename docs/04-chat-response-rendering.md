@@ -21,8 +21,8 @@ Given a `ChatResponse`, the Chat screen appends **one assistant turn** to the tr
 ## Actions available on a rendered turn
 - **Add to cart** (product card) → local cart mutation only (see Gap #1 in [03-api-integration.md](03-api-integration.md)); no new chat call.
 - **Ask about fit for this item** (product card) → composes the next user message with `selected_sku` set to that product's `sku`, prefilling input with "Will size ___ fit me?" for the user to edit/send.
-- **Accept upsell** → explicit customer action only. With the current API, the UI sends a clear follow-up chat turn and never claims enrollment or subscription. Replace this bridge with a dedicated authenticated offer-event endpoint when the backend publishes one.
-- **Dismiss / decline upsell** → send an explicit follow-up so the orchestrator can record the customer's choice; persist the resolved card state within the browser session.
+- **Accept upsell** → explicit customer action only. Call `POST /api/v1/upsell/decisions/{decision_id}/events` with `OFFER_ACCEPTED`; never claim enrollment or subscription.
+- **Dismiss / decline upsell** → record `OFFER_DISMISSED` or `OFFER_DECLINED` through the same endpoint and persist the resolved card state within the browser session.
 - **Retry** (only on a failed/500 turn) → resend the same `{session_id, message, selected_sku}` payload.
 
 ## Failure/partial-response handling

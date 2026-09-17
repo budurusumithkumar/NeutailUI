@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/Button";
-import { drawShirtOnCanvas } from "./drawShirtOnCanvas";
-import { estimateTorso, loadPoseDetector, smoothTorso } from "./poseTracking";
-import type { TorsoPose } from "./poseTracking";
+import type { BodyPix } from "@tensorflow-models/body-pix";
+import { loadBodySegmenter, segmentGarmentMask } from "./bodySegmentation";
+import type { GarmentBounds } from "./bodySegmentation";
+import { drawGarmentFill } from "./drawGarmentFill";
 import type { TshirtItem } from "./tshirts";
 
 type CameraState =
@@ -23,32 +24,32 @@ const STATE_MESSAGE: Record<Exclude<CameraState, "active">, string> = {
   error: "Couldn't start the camera. Please retry.",
 };
 
-const DETECTION_INTERVAL_MS = 80;
+const DETECTION_INTERVAL_MS = 120;
 
-// Tracks the customer's shoulders/torso (MoveNet, see poseTracking.ts) each frame
-// and draws the selected tee warped to that position/rotation/scale directly onto
-// a canvas, on top of the mirrored camera feed — a real (if approximate) AR
-// overlay, not a screen-fixed sticker. Nothing captured ever leaves the browser.
+// Recolors the customer's *actual* shirt in the live camera feed to the
+// selected tee, instead of warping a synthetic shape over their body: BodyPix
+// (see bodySegmentation.ts) segments which pixels are torso/upper-arm each
+// frame, and the render loop blends the selected color/pattern into just that
+// region using the canvas "color" composite mode, which keeps the backdrop's
+// real luminance (folds, shading, motion) and only swaps hue/saturation. This
+// only recolors clothing that's already there — it can't add a garment where
+// there is none, or change a collar/sleeve shape. Nothing captured leaves the browser.
 export function CameraTryOn({ item }: { item: TshirtItem }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const runningRef = useRef(false);
-  const torsoRef = useRef<TorsoPose | null>(null);
+  const maskCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
+  const fillCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
+  const boundsRef = useRef<GarmentBounds | null>(null);
   const itemRef = useRef(item);
-  const sizeAdjustRef = useRef(1);
 
   const [state, setState] = useState<CameraState>("idle");
-  const [sizeAdjust, setSizeAdjust] = useState(1);
   const [personVisible, setPersonVisible] = useState(true);
 
   useEffect(() => {
     itemRef.current = item;
   }, [item]);
-
-  useEffect(() => {
-    sizeAdjustRef.current = sizeAdjust;
-  }, [sizeAdjust]);
 
   useEffect(() => {
     return () => {
@@ -63,32 +64,54 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
     const ctx = canvas?.getContext("2d");
     if (!canvas || !video || !ctx) return;
 
+    const fillCanvas = fillCanvasRef.current;
+    const fillCtx = fillCanvas.getContext("2d");
+
     const frame = () => {
       if (!runningRef.current) return;
+
       ctx.save();
       ctx.scale(-1, 1);
       ctx.translate(-canvas.width, 0);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      if (torsoRef.current) {
-        drawShirtOnCanvas(ctx, torsoRef.current, itemRef.current, sizeAdjustRef.current);
+
+      const maskCanvas = maskCanvasRef.current;
+      if (fillCtx && maskCanvas.width > 0) {
+        fillCanvas.width = canvas.width;
+        fillCanvas.height = canvas.height;
+        fillCtx.clearRect(0, 0, fillCanvas.width, fillCanvas.height);
+        drawGarmentFill(fillCtx, itemRef.current, fillCanvas.width, fillCanvas.height, boundsRef.current);
+
+        fillCtx.globalCompositeOperation = "destination-in";
+        fillCtx.filter = "blur(3px)";
+        fillCtx.drawImage(maskCanvas, 0, 0, fillCanvas.width, fillCanvas.height);
+        fillCtx.filter = "none";
+        fillCtx.globalCompositeOperation = "source-over";
+
+        // "color" keeps the backdrop's (real video's) luminance — its actual
+        // folds/shading — and only takes hue+saturation from our fill.
+        ctx.globalCompositeOperation = "color";
+        ctx.drawImage(fillCanvas, 0, 0);
+        ctx.globalCompositeOperation = "source-over";
       }
+
       ctx.restore();
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
   }
 
-  async function runDetectLoop(video: HTMLVideoElement, detector: Awaited<ReturnType<typeof loadPoseDetector>>) {
+  async function runDetectLoop(video: HTMLVideoElement, net: BodyPix) {
     let lastVisible = true;
     while (runningRef.current) {
       try {
-        const poses = await detector.estimatePoses(video, { flipHorizontal: false });
-        const next = poses[0] ? estimateTorso(poses[0]) : null;
-        torsoRef.current = smoothTorso(torsoRef.current, next);
-        const visible = torsoRef.current !== null;
-        if (visible !== lastVisible) {
-          lastVisible = visible;
-          setPersonVisible(visible);
+        const result = await segmentGarmentMask(net, video, maskCanvasRef.current);
+        if (result.found) {
+          boundsRef.current = result.bounds;
+        }
+        if (result.found !== lastVisible) {
+          lastVisible = result.found;
+          setPersonVisible(result.found);
         }
       } catch {
         // A single failed detection frame shouldn't kill the loop.
@@ -121,7 +144,7 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
       }
 
       setState("loadingModel");
-      const detector = await loadPoseDetector();
+      const net = await loadBodySegmenter();
 
       const canvas = canvasRef.current;
       if (canvas) {
@@ -133,7 +156,7 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
       runningRef.current = true;
       setState("active");
       runRenderLoop();
-      void runDetectLoop(video, detector);
+      void runDetectLoop(video, net);
     } catch (error) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -173,31 +196,9 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
         )}
       </div>
 
-      {state === "active" && (
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs text-neutral-500">Fit</span>
-          <input
-            type="range"
-            min={0.8}
-            max={1.3}
-            step={0.02}
-            value={sizeAdjust}
-            onChange={(event) => setSizeAdjust(Number(event.target.value))}
-            className="flex-1"
-          />
-          <button
-            type="button"
-            onClick={() => setSizeAdjust(1)}
-            className="text-xs text-neutral-500 underline"
-          >
-            Reset
-          </button>
-        </div>
-      )}
-
       <p className="mt-2 text-center text-[11px] text-neutral-400">
-        Tracks your shoulders in real time so the tee moves with you — an approximate
-        overlay, not a real garment simulation. Nothing is uploaded.
+        Recolors the shirt you're already wearing to this tee, in real time — it can't
+        add a garment where there isn't one. Nothing is uploaded.
       </p>
     </div>
   );

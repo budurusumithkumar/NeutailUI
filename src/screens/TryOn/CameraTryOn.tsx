@@ -111,7 +111,7 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
             aria-label={`Position ${item.name} overlay`}
             aria-valuenow={Math.round(scale * 100)}
             tabIndex={0}
-            className="absolute left-1/2 top-1/2 w-[55%] touch-none select-none"
+            className="absolute left-1/2 top-[66%] w-[55%] touch-none select-none"
             style={{
               transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
             }}

@@ -91,15 +91,19 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
   return (
     <div className="w-full">
       <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-neutral-900">
-        {state === "active" && (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="absolute inset-0 h-full w-full [transform:scaleX(-1)] object-cover"
-          />
-        )}
+        {/* Always mounted (never conditionally rendered) so `videoRef.current` is
+            already set by the time startCamera() assigns srcObject to it — otherwise
+            the ref is null while state is still "requesting" and the stream never
+            attaches to any element. */}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={`absolute inset-0 h-full w-full [transform:scaleX(-1)] object-cover ${
+            state === "active" ? "" : "invisible"
+          }`}
+        />
 
         {state === "active" && (
           <div

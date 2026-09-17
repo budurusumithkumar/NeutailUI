@@ -114,6 +114,36 @@ export interface UpsellResult {
   llm_invoked?: boolean | null;
 }
 
+export interface UpsellTrigger {
+  trigger_type: string;
+  source_agent: string;
+  sku?: string | null;
+  strength?: number | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface EngagementEventInput {
+  session_id: string;
+  event_type: "PRODUCT_VIEWED";
+  sku: string;
+  idempotency_key: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface EngagementEventResponse {
+  event_id: string;
+  recorded: boolean;
+  engagement_count: number;
+  trigger: UpsellTrigger | null;
+  trace_id: string;
+  upsell_result: UpsellResult | null;
+}
+
+export type UpsellDecisionEventType =
+  | "OFFER_ACCEPTED"
+  | "OFFER_DECLINED"
+  | "OFFER_DISMISSED";
+
 export type AgentStatus = "STARTED" | "COMPLETED" | "FAILED" | "SKIPPED";
 export interface AgentActivity {
   agent: string;
@@ -125,6 +155,7 @@ export type ChatIntent =
   | "PRODUCT_DISCOVERY"
   | "FIT_QUERY"
   | "SERVICE_QUERY"
+  | "CUSTOMER_CONTEXT"
   | "GENERAL_QUERY"
   | "CLARIFICATION";
 

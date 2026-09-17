@@ -19,6 +19,7 @@ const chatIntents = new Set<ChatIntent>([
   "PRODUCT_DISCOVERY",
   "FIT_QUERY",
   "SERVICE_QUERY",
+  "CUSTOMER_CONTEXT",
   "GENERAL_QUERY",
   "CLARIFICATION",
 ]);
@@ -161,7 +162,7 @@ function normalizeOffer(upsell: UnknownRecord): ServiceOffer | null {
   };
 }
 
-function normalizeUpsell(
+export function normalizeUpsellResult(
   value: unknown,
   response?: UnknownRecord,
 ): UpsellResult | null {
@@ -302,7 +303,7 @@ export function normalizeChatResponse(payload: unknown): ChatResponse {
     customer_context: normalizeCustomerContext(response.customer_context),
     products: normalizeProducts(response),
     fit: normalizeFit(rawFit),
-    upsell: normalizeUpsell(rawUpsell, response),
+    upsell: normalizeUpsellResult(rawUpsell, response),
     agent_activity: normalizeAgentActivity(response),
   };
 }

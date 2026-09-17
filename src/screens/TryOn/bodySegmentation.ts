@@ -40,6 +40,12 @@ const SEGMENTATION_CONFIG = {
   maxDetections: 1,
 } as const;
 
+const MIN_KEYPOINT_SCORE = 0.3;
+// The shoulder keypoint sits at the joint, a bit below the actual collar —
+// allow a little margin above it before cutting the mask off, proportional
+// to shoulder width so it scales with how close the customer is to the camera.
+const COLLAR_MARGIN_FACTOR = 0.35;
+
 export interface GarmentCentroid {
   x: number;
   y: number;
@@ -55,17 +61,36 @@ export interface GarmentSegmentation {
   centroid: GarmentCentroid | null;
 }
 
+function findKeypoint(
+  keypoints: Array<{ part: string; position: { x: number; y: number }; score: number }>,
+  part: string,
+) {
+  const point = keypoints.find((k) => k.part === part);
+  return point && point.score >= MIN_KEYPOINT_SCORE ? point.position : null;
+}
+
 /**
  * Runs part segmentation and writes a torso/upper-arm alpha mask into
  * `maskCanvas` (opaque white where the garment region is, transparent
  * elsewhere) at the video's native resolution, plus that region's centroid
- * (used to place pattern graphics). The centroid — a mean over every garment
- * pixel — is used instead of a bounding box specifically because a bounding
- * box is dominated by whichever single pixel is furthest out; a handful of
- * misclassified pixels near the neck previously dragged the whole box (and
- * the graphic placed from it) up toward the face and inflated its size.
- * `found: false` means no person was detected — the caller should keep
- * showing the last good mask briefly rather than clearing it on a missed frame.
+ * (used to place pattern graphics).
+ *
+ * The raw part-segmentation boundary alone isn't reliable at close webcam
+ * range: pixels near the neck/chin get misclassified as torso often enough
+ * that the mask visibly bled up onto the face and blurred it (see the fix
+ * history in CameraTryOn.tsx). `segmentPersonParts` already computes pose
+ * keypoints as part of the same pass (`allPoses`), so when shoulders are
+ * confidently detected, this draws a hard cutoff at the shoulder line (plus
+ * a small collar margin) and excludes any "torso" pixel above it outright,
+ * instead of trusting the part boundary there.
+ *
+ * The centroid — a mean over every remaining garment pixel — is used
+ * instead of a bounding box for graphic placement because a bounding box
+ * is dominated by whichever single pixel is furthest out; a handful of
+ * misclassified pixels previously dragged a bounding box (and a graphic
+ * placed from it) up toward the face and inflated its size. `found: false`
+ * means no person was detected — the caller should keep showing the last
+ * good mask briefly rather than clearing it on a missed frame.
  */
 export async function segmentGarmentMask(
   net: BodyPix,
@@ -79,15 +104,27 @@ export async function segmentGarmentMask(
   maskCanvas.width = result.width;
   maskCanvas.height = result.height;
 
+  let cutoffY = -Infinity;
+  const pose = result.allPoses[0];
+  if (pose) {
+    const leftShoulder = findKeypoint(pose.keypoints, "leftShoulder");
+    const rightShoulder = findKeypoint(pose.keypoints, "rightShoulder");
+    if (leftShoulder && rightShoulder) {
+      const shoulderWidth = Math.hypot(rightShoulder.x - leftShoulder.x, rightShoulder.y - leftShoulder.y);
+      cutoffY = Math.min(leftShoulder.y, rightShoulder.y) - shoulderWidth * COLLAR_MARGIN_FACTOR;
+    }
+  }
+
   const imageData = ctx.createImageData(result.width, result.height);
   let sumX = 0;
   let sumY = 0;
   let pixelCount = 0;
 
   for (let y = 0; y < result.height; y++) {
+    const aboveCutoff = y < cutoffY;
     for (let x = 0; x < result.width; x++) {
       const i = y * result.width + x;
-      const isGarment = GARMENT_PART_IDS.has(result.data[i]);
+      const isGarment = !aboveCutoff && GARMENT_PART_IDS.has(result.data[i]);
       const offset = i * 4;
       imageData.data[offset] = 255;
       imageData.data[offset + 1] = 255;

@@ -6,10 +6,17 @@ import type { TorsoPose } from "./poseTracking";
 // shoulder seam runs from (48,58) to (112,58), hem runs across y=182.
 const PATH_SHOULDER_SPAN = 112 - 48;
 const PATH_TORSO_SPAN = 182 - 58;
-const ANCHOR = { x: (48 + 112) / 2, y: 58 };
+// MoveNet's shoulder keypoint sits at the joint (roughly armpit height), noticeably
+// below and narrower than the actual fabric shoulder/collar line — confirmed against
+// a real photo, where the tracked shirt rendered too low and too narrow, real
+// shoulders visibly peeking out past both edges. COLLAR_LIFT nudges the anchor
+// down in local space (which shifts the rendered garment UP relative to the
+// tracked joint — see the comment in drawShirtOnCanvas below) to compensate.
+const COLLAR_LIFT = 16;
+const ANCHOR = { x: (48 + 112) / 2, y: 58 + COLLAR_LIFT };
 
-const SHOULDER_FIT_FACTOR = 1.15; // shirt sits slightly looser than bare shoulder width
-const TORSO_FIT_FACTOR = 1.05; // hem falls a little past the tracked hip line
+const SHOULDER_FIT_FACTOR = 1.55; // shirt is meaningfully wider than the tracked joint-to-joint distance
+const TORSO_FIT_FACTOR = 1.1; // hem falls a little past the tracked hip line
 const FALLBACK_TORSO_RATIO = 1.55; // used when hips aren't visible in frame
 
 const shirtPath = new Path2D(WORN_SHIRT_PATH);

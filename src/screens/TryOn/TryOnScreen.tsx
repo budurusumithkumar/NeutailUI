@@ -3,7 +3,7 @@ import { AppLayout } from "../../components/AppLayout";
 import { Button } from "../../components/Button";
 import { useToast } from "../../components/toastContext";
 import { useCartStore } from "../../cart/cartStore";
-import { TryOnFigure } from "./TryOnFigure";
+import { CameraTryOn } from "./CameraTryOn";
 import { TshirtThumbnail } from "./TshirtThumbnail";
 import { TSHIRTS } from "./tshirts";
 
@@ -33,10 +33,10 @@ export function TryOnScreen() {
     <AppLayout>
       <h1 className="text-2xl font-semibold">Try on a t-shirt</h1>
       <p className="mt-1 text-sm text-neutral-500">
-        Pick a tee to see how it looks — a quick visual preview, not a photo of you.
+        Pick a tee, then turn on your camera to see it on you.
       </p>
 
-      <div className="mt-6 grid gap-6 md:grid-cols-[1fr_260px]">
+      <div className="mt-6 grid gap-6 md:grid-cols-[1fr_320px]">
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
           {TSHIRTS.map((item) => (
             <button
@@ -58,7 +58,9 @@ export function TryOnScreen() {
 
         <div className="flex flex-col items-center rounded-2xl border border-neutral-200 bg-white p-4">
           <p className="text-xs font-medium uppercase text-neutral-400">Virtual try-on</p>
-          <TryOnFigure item={selected} />
+          <div className="mt-2 w-full">
+            <CameraTryOn item={selected} />
+          </div>
           <p className="mt-3 text-sm font-semibold">{selected.name}</p>
           <p className="text-sm text-neutral-500">£{selected.price_gbp.toFixed(2)}</p>
 

@@ -36,9 +36,9 @@ Each screen lists: purpose, primary API calls, and status (In scope / Future).
 - **Status:** In scope, small.
 
 ## 7. Wardrobe / Virtual Try-On
-- **Purpose:** a lightweight styling toy — pick from a small hardcoded t-shirt catalog and preview it on a stylized figure before adding to cart.
-- **API:** none — the catalog (`src/screens/TryOn/tshirts.ts`) and the artwork are both hardcoded/generated client-side (see Gap #4 below); this is not the chat-driven discovery flow and doesn't call `/api/v1/chat`.
-- **Content:** grid of t-shirt thumbnails (color/pattern only, no photos — rendered as inline SVG); a preview panel showing the selected tee on a simple front-facing figure (also inline SVG, not a photo of the user or real AR); size picker; "Add to cart" using the same `CartRepository` as Chat/Cart.
+- **Purpose:** a lightweight styling toy — pick from a small hardcoded t-shirt catalog and preview it live on the customer's own camera feed before adding to cart.
+- **API:** none — the catalog (`src/screens/TryOn/tshirts.ts`) and the shirt artwork are both hardcoded/generated client-side (see Gap #4 below); this is not the chat-driven discovery flow and doesn't call `/api/v1/chat`. The camera feed never leaves the browser — nothing is uploaded, recorded, or sent to any endpoint.
+- **Content:** grid of t-shirt thumbnails (color/pattern only, no photos — rendered as inline SVG); a preview panel (`CameraTryOn.tsx`) that requests the device camera via `getUserMedia` and overlays the selected tee (inline SVG) on the live video — the customer drags and resizes the overlay themselves to line it up, since there is no pose-detection/body-tracking backend; graceful fallback states for permission-denied, no-camera-found, and generic errors; size picker; "Add to cart" using the same `CartRepository` as Chat/Cart.
 - **Status:** In scope — explicitly requested by the user as a standalone feature, separate from the out-of-scope full product catalog below.
 
 ## 8. Session/Error boundaries

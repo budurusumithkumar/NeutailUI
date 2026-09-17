@@ -32,7 +32,7 @@ There is no `Cart`, `CartItem`, or any `/cart` path in the OpenAPI file. The use
 Only single-session `GET`/`DELETE`/`POST` exist. A "past conversations" screen isn't buildable against the current contract; deferred (see [01-screens.md](01-screens.md) out-of-scope list).
 
 ### Gap #4 — No product catalog/search endpoint
-Products only ever arrive embedded in a `ChatResponse`. There's no way to browse without chatting first. This is presumably intentional (agent-first UX) but is called out in case a "browse all products" screen was expected. The Wardrobe/Try-On screen (`src/screens/TryOn/`) sidesteps this entirely with a small hardcoded catalog and generated SVG artwork — it's a standalone styling toy, not a substitute for real catalog browsing, and adds no new API surface.
+Products only ever arrive embedded in a `ChatResponse`. There's no way to browse without chatting first. This is presumably intentional (agent-first UX) but is called out in case a "browse all products" screen was expected. The Wardrobe/Try-On screen (`src/screens/TryOn/`) sidesteps this entirely with a small hardcoded catalog and generated SVG artwork — it's a standalone styling toy, not a substitute for real catalog browsing, and adds no new API surface. Its camera preview (`getUserMedia`) is a manual drag-to-align overlay, not real pose detection/AR — there is no such backend either.
 
 ## Auth/session lifecycle contract
 - Bearer token attached via an Axios/fetch interceptor to every call except `login` and `health`.

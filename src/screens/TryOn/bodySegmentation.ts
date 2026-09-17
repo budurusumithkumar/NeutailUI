@@ -33,6 +33,8 @@ export function loadBodySegmenter(): Promise<BodyPix> {
 // (left_upper_arm_front=2, left_upper_arm_back=3, right_upper_arm_front=4,
 // right_upper_arm_back=5, torso_front=12, torso_back=13.)
 const GARMENT_PART_IDS = new Set([2, 3, 4, 5, 12, 13]);
+// left_face=0, right_face=1.
+const FACE_PART_IDS = new Set([0, 1]);
 
 const SEGMENTATION_CONFIG = {
   internalResolution: "medium",
@@ -40,11 +42,11 @@ const SEGMENTATION_CONFIG = {
   maxDetections: 1,
 } as const;
 
-const MIN_KEYPOINT_SCORE = 0.3;
-// The shoulder keypoint sits at the joint, a bit below the actual collar —
-// allow a little margin above it before cutting the mask off, proportional
-// to shoulder width so it scales with how close the customer is to the camera.
-const COLLAR_MARGIN_FACTOR = 0.35;
+// How far below the detected face's bottom edge (in multiples of the face's
+// own height) to still allow before cutting the mask off — covers the neck
+// itself before the collar starts. Tuned as a starting heuristic; there's no
+// hard measurement backing this, so it may need another pass.
+const NECK_ALLOWANCE_FACTOR = 0.5;
 
 export interface GarmentCentroid {
   x: number;
@@ -61,14 +63,6 @@ export interface GarmentSegmentation {
   centroid: GarmentCentroid | null;
 }
 
-function findKeypoint(
-  keypoints: Array<{ part: string; position: { x: number; y: number }; score: number }>,
-  part: string,
-) {
-  const point = keypoints.find((k) => k.part === part);
-  return point && point.score >= MIN_KEYPOINT_SCORE ? point.position : null;
-}
-
 /**
  * Runs part segmentation and writes a torso/upper-arm alpha mask into
  * `maskCanvas` (opaque white where the garment region is, transparent
@@ -77,18 +71,20 @@ function findKeypoint(
  *
  * The raw part-segmentation boundary alone isn't reliable at close webcam
  * range: pixels near the neck/chin get misclassified as torso often enough
- * that the mask visibly bled up onto the face and blurred it (see the fix
- * history in CameraTryOn.tsx). `segmentPersonParts` already computes pose
- * keypoints as part of the same pass (`allPoses`), so when shoulders are
- * confidently detected, this draws a hard cutoff at the shoulder line (plus
- * a small collar margin) and excludes any "torso" pixel above it outright,
- * instead of trusting the part boundary there.
+ * that the mask visibly bled up onto the face and blurred it. An earlier
+ * version tried cutting the mask off at the pose-estimated shoulder line,
+ * but that had no visible effect in practice — the bundled pose estimator
+ * likely isn't detecting shoulders confidently enough for it to engage.
+ *
+ * This instead uses the *face* pixels from the same part-segmentation pass
+ * (they're evidently reliable — the face itself never renders recolored)
+ * to find where the face actually ends, and cuts the mask off a bit below
+ * that (allowing room for the neck itself), regardless of what the torso
+ * part label says above that line.
  *
  * The centroid — a mean over every remaining garment pixel — is used
  * instead of a bounding box for graphic placement because a bounding box
- * is dominated by whichever single pixel is furthest out; a handful of
- * misclassified pixels previously dragged a bounding box (and a graphic
- * placed from it) up toward the face and inflated its size. `found: false`
+ * is dominated by whichever single pixel is furthest out. `found: false`
  * means no person was detected — the caller should keep showing the last
  * good mask briefly rather than clearing it on a missed frame.
  */
@@ -104,16 +100,17 @@ export async function segmentGarmentMask(
   maskCanvas.width = result.width;
   maskCanvas.height = result.height;
 
-  let cutoffY = -Infinity;
-  const pose = result.allPoses[0];
-  if (pose) {
-    const leftShoulder = findKeypoint(pose.keypoints, "leftShoulder");
-    const rightShoulder = findKeypoint(pose.keypoints, "rightShoulder");
-    if (leftShoulder && rightShoulder) {
-      const shoulderWidth = Math.hypot(rightShoulder.x - leftShoulder.x, rightShoulder.y - leftShoulder.y);
-      cutoffY = Math.min(leftShoulder.y, rightShoulder.y) - shoulderWidth * COLLAR_MARGIN_FACTOR;
+  let faceMinY = Infinity;
+  let faceMaxY = -Infinity;
+  for (let i = 0; i < result.data.length; i++) {
+    if (FACE_PART_IDS.has(result.data[i])) {
+      const y = Math.floor(i / result.width);
+      if (y < faceMinY) faceMinY = y;
+      if (y > faceMaxY) faceMaxY = y;
     }
   }
+  const cutoffY =
+    faceMaxY > -Infinity ? faceMaxY + (faceMaxY - faceMinY) * NECK_ALLOWANCE_FACTOR : -Infinity;
 
   const imageData = ctx.createImageData(result.width, result.height);
   let sumX = 0;

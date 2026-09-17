@@ -22,6 +22,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <NavLink to="/chat" className={navLinkClass}>
               Chat
             </NavLink>
+            <NavLink to="/try-on" className={navLinkClass}>
+              Try-On
+            </NavLink>
             <NavLink to="/cart" className={navLinkClass}>
               Cart{cartCount > 0 ? ` (${cartCount})` : ""}
             </NavLink>

@@ -4,6 +4,7 @@ import { ChatScreen } from "../screens/Chat/ChatScreen";
 import { HomeScreen } from "../screens/Home/HomeScreen";
 import { LoginScreen } from "../screens/Login/LoginScreen";
 import { ProfileScreen } from "../screens/Profile/ProfileScreen";
+import { TryOnScreen } from "../screens/TryOn/TryOnScreen";
 import { RequireAuth } from "./RequireAuth";
 
 export function AppRouter() {
@@ -23,6 +24,14 @@ export function AppRouter() {
         element={
           <RequireAuth>
             <ChatScreen />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/try-on"
+        element={
+          <RequireAuth>
+            <TryOnScreen />
           </RequireAuth>
         }
       />

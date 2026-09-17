@@ -35,13 +35,19 @@ Each screen lists: purpose, primary API calls, and status (In scope / Future).
 - **API:** `GET /api/v1/customers/me/summary`, `POST /api/v1/auth/logout`.
 - **Status:** In scope, small.
 
-## 7. Session/Error boundaries
+## 7. Wardrobe / Virtual Try-On
+- **Purpose:** a lightweight styling toy — pick from a small hardcoded t-shirt catalog and preview it on a stylized figure before adding to cart.
+- **API:** none — the catalog (`src/screens/TryOn/tshirts.ts`) and the artwork are both hardcoded/generated client-side (see Gap #4 below); this is not the chat-driven discovery flow and doesn't call `/api/v1/chat`.
+- **Content:** grid of t-shirt thumbnails (color/pattern only, no photos — rendered as inline SVG); a preview panel showing the selected tee on a simple front-facing figure (also inline SVG, not a photo of the user or real AR); size picker; "Add to cart" using the same `CartRepository` as Chat/Cart.
+- **Status:** In scope — explicitly requested by the user as a standalone feature, separate from the out-of-scope full product catalog below.
+
+## 8. Session/Error boundaries
 - **401 / session-expired interstitial:** any API call returning 401 clears the token and redirects to Login with a "your session expired" message.
 - **Generic error state:** for 500s (`ErrorResponse`), show retry affordance; surface `trace_id` in a "details" disclosure for support/debugging.
 - **Status:** In scope (cross-cutting, not a distinct route).
 
 ## Explicitly out of scope for this phase (flagged, not built)
-- **Product catalog/browse/search screen** — no list/search endpoint exists; discovery only happens through chat.
+- **Full product catalog/browse/search screen** — no list/search endpoint exists; discovery of real, purchasable stock only happens through chat. (The Wardrobe/Try-On screen above is a separate, hardcoded styling toy — it is not this.)
 - **Order history / checkout** — no order or payment endpoints exist.
 - **Session history list** ("all my past conversations") — the contract has `GET /sessions/{id}` (single) and `POST /sessions` (create), but no "list my sessions" endpoint. Can revisit if backend adds one.
 - **Stylist/Admin consoles** — `AuthUser.role` supports these roles but no screens are designed for them here.
@@ -50,6 +56,7 @@ Each screen lists: purpose, primary API calls, and status (In scope / Future).
 ```
 Login ──(success)──▶ Home ──▶ Chat ◀──▶ Product Detail (modal)
                        │        │
-                       ├──▶ Cart ◀───────────┘ (Add to cart)
+                       ├──▶ Try-On ────────────┐
+                       ├──▶ Cart ◀──────────────┴ (Add to cart)
                        └──▶ Profile ──▶ Logout ──▶ Login
 ```

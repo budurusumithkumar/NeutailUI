@@ -30,9 +30,17 @@ const DETECTION_INTERVAL_MS = 120;
 // an imperceptible smear, but a real 3D fold's brightness gradient is
 // broader than that and survives.
 const LIGHTING_BLUR_PX = 24;
-// "overlay" only lightens/darkens relative to mid-grey — real content, but
-// reduced opacity keeps it a subtle modulation rather than a heavy-handed one.
-const LIGHTING_OPACITY = 0.55;
+// Real fold shadows under typical indoor lighting are subtle — testing with
+// a realistic (not exaggerated) fold showed the first version's contrast(100%)
+// i.e. none at all, plus 0.55 opacity, made the effect essentially invisible,
+// matching reports of a flat-looking result. Boosting contrast on the
+// (already blurred+desaturated, so no real color/pattern to amplify)
+// lighting layer before compositing is what makes a real but faint fold
+// actually show up.
+const LIGHTING_CONTRAST_PCT = 300;
+// "overlay" only lightens/darkens relative to mid-grey — real content, not
+// a heavy-handed effect, so it can afford to run stronger than a naive blend.
+const LIGHTING_OPACITY = 0.75;
 
 // Redraws the customer's *actual* shirt in the live camera feed as the
 // selected tee, instead of warping a synthetic shape over their body:
@@ -122,7 +130,7 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
         lightingCanvas.width = canvas.width;
         lightingCanvas.height = canvas.height;
         lightingCtx.clearRect(0, 0, lightingCanvas.width, lightingCanvas.height);
-        lightingCtx.filter = `blur(${LIGHTING_BLUR_PX}px) grayscale(1)`;
+        lightingCtx.filter = `blur(${LIGHTING_BLUR_PX}px) grayscale(1) contrast(${LIGHTING_CONTRAST_PCT}%)`;
         lightingCtx.drawImage(video, 0, 0, lightingCanvas.width, lightingCanvas.height);
         lightingCtx.filter = "none";
         lightingCtx.globalCompositeOperation = "destination-in";

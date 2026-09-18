@@ -3,8 +3,8 @@ import type { TshirtItem } from "./tshirts";
 
 /**
  * Fills `ctx` with the selected tee's color/pattern and a *designed* fabric
- * look (a light-from-above gradient plus a few soft fold lines) — the caller
- * then draws this, clipped to the real garment mask, fully opaque over the
+ * look (a light-from-above gradient) — the caller then draws this, clipped
+ * to the real garment mask, fully opaque over the
  * customer's actual shirt (see CameraTryOn.tsx), rather than blending with
  * the real video's pixels. An earlier version tried keeping the backdrop's
  * real luminance (via a "color" composite blend) so folds/shading would
@@ -18,10 +18,10 @@ import type { TshirtItem } from "./tshirts";
  *
  * Stripes just need to be screen-space horizontal bands wide enough to be
  * cropped by whatever the mask's shape turns out to be. The graphic emblem
- * and the fold lines need to know roughly where the garment actually is —
- * `centroid` (a mean over every masked pixel, plus its pixel count as a
- * stable on-screen-scale proxy) gives that without a bounding box's
- * sensitivity to a few stray misclassified pixels.
+ * needs to know roughly where the garment actually is — `centroid` (a mean
+ * over every masked pixel, plus its pixel count as a stable on-screen-scale
+ * proxy) gives that without a bounding box's sensitivity to a few stray
+ * misclassified pixels.
  */
 export function drawGarmentFill(
   ctx: CanvasRenderingContext2D,
@@ -71,17 +71,4 @@ export function drawGarmentFill(
   shading.addColorStop(1, "rgba(0,0,0,0.24)");
   ctx.fillStyle = shading;
   ctx.fillRect(0, 0, width, height);
-
-  if (centroid) {
-    const scale = Math.sqrt(centroid.pixelCount);
-    ctx.strokeStyle = "rgba(0,0,0,0.12)";
-    ctx.lineWidth = Math.max(2, scale * 0.018);
-    for (const dx of [-0.26, 0, 0.26]) {
-      const x = centroid.x + scale * dx;
-      ctx.beginPath();
-      ctx.moveTo(x, centroid.y - scale * 0.55);
-      ctx.quadraticCurveTo(x + scale * 0.03, centroid.y, x, centroid.y + scale * 0.85);
-      ctx.stroke();
-    }
-  }
 }

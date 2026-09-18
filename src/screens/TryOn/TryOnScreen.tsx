@@ -37,7 +37,7 @@ export function TryOnScreen() {
       </p>
 
       <div className="mt-6 grid gap-6 md:grid-cols-[1fr_320px]">
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-3 items-start gap-3 sm:grid-cols-4">
           {TSHIRTS.map((item) => (
             <button
               key={item.id}

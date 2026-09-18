@@ -11,3 +11,7 @@ Spec-driven artifacts, written before any React code, derived from the API contr
 7. [06-data-models.md](06-data-models.md) — TypeScript types mirrored from the OpenAPI schemas, plus the client-only Cart model.
 
 Once these are confirmed, React code generation proceeds screen-by-screen against them.
+
+## Proposals (not built)
+
+- [07-photorealistic-tryon-options.md](07-photorealistic-tryon-options.md) — the live camera try-on's realism ceiling, and two sketched (unbuilt) options to get past it: a backend-mediated AI-generated snapshot, or a WebGPU-based live 3D render.

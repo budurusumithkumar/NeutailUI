@@ -17,10 +17,17 @@ export function loadBodySegmenter(): Promise<BodyPix> {
         import("@tensorflow-models/body-pix"),
       ]);
       await tf.ready();
+      // ResNet50 instead of MobileNetV1: several real-world tests showed the
+      // torso/face part boundary itself misclassifying a large, contiguous
+      // chunk of neck/chin as torso — not just a few edge pixels — which no
+      // amount of post-hoc cutoff math can fully correct if the underlying
+      // labels are wrong over a wide area. ResNet50 is BodyPix's more
+      // accurate (but slower, larger-download) architecture; worth the
+      // tradeoff since this loads once per session and runs on a throttled
+      // detection interval, not every render frame.
       return bodyPix.load({
-        architecture: "MobileNetV1",
-        outputStride: 16,
-        multiplier: 0.75,
+        architecture: "ResNet50",
+        outputStride: 32,
         quantBytes: 2,
       });
     })();
@@ -45,11 +52,15 @@ const SEGMENTATION_CONFIG = {
 // The face's linear size is approximated as sqrt(pixelCount) (see the same
 // reasoning on GarmentCentroid below) — never a min/max over raw pixels,
 // which a single stray pixel anywhere (a hand mistaken for skin, say) can
-// drag arbitrarily far. FACE_BOTTOM_FACTOR estimates the distance from the
-// face's own centroid down to its chin; NECK_ALLOWANCE_FACTOR then adds room
-// for the neck itself before the collar starts. Both are starting heuristics.
-const FACE_BOTTOM_FACTOR = 0.65;
-const NECK_ALLOWANCE_FACTOR = 0.45;
+// drag arbitrarily far. FACE_TO_COLLAR_FACTOR estimates the total distance
+// from the face's own centroid down to where the collar legitimately starts
+// (roughly: half the face's height to reach the chin, plus a small gap for
+// the neck itself). A first attempt combined two separate factors (0.65 for
+// the chin + 0.45 for the neck = 1.1 total) and badly overshot on a real
+// photo — with a close-up face, that pushed the cutoff below the entire
+// visible torso, leaving almost nothing recolored. This is deliberately far
+// more conservative; it may still need tuning.
+const FACE_TO_COLLAR_FACTOR = 0.55;
 
 export interface GarmentCentroid {
   x: number;
@@ -109,7 +120,7 @@ export async function segmentGarmentMask(
   }
   const cutoffY =
     facePixelCount > 0
-      ? faceSumY / facePixelCount + Math.sqrt(facePixelCount) * (FACE_BOTTOM_FACTOR + NECK_ALLOWANCE_FACTOR)
+      ? faceSumY / facePixelCount + Math.sqrt(facePixelCount) * FACE_TO_COLLAR_FACTOR
       : -Infinity;
 
   const imageData = ctx.createImageData(result.width, result.height);

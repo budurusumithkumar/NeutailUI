@@ -70,6 +70,18 @@ const FACE_TO_COLLAR_FACTOR = 0.35;
 // any remaining miscalibration look broken rather than merely imperfect.
 const TRANSITION_BAND_FACTOR = 0.3;
 
+// A real open collar leaves a triangle of visible chest skin — BodyPix has
+// no "chest skin" part, so those pixels usually land as background, which
+// makes the garment mask have a hole right in the middle of the chest. With
+// a near-white tee there's almost no color contrast to signal "that gap is
+// intentional," so it just reads as a broken/rotated shape. Blurring the
+// raw part mask and re-thresholding closes small enclosed gaps like that —
+// a hole surrounded by "on" pixels ends up with a high blurred value and
+// gets filled in — while only growing the true outer boundary by a similarly
+// small, much less noticeable margin.
+const HOLE_FILL_BLUR_PX = 20;
+const HOLE_FILL_THRESHOLD = 90;
+
 export interface GarmentCentroid {
   x: number;
   y: number;
@@ -85,6 +97,11 @@ export interface GarmentSegmentation {
   centroid: GarmentCentroid | null;
 }
 
+// Reused across calls instead of creating fresh canvases every detection
+// tick; sized on demand inside segmentGarmentMask.
+const rawMaskCanvas = document.createElement("canvas");
+const closedMaskCanvas = document.createElement("canvas");
+
 /**
  * Runs part segmentation and writes a torso/upper-arm alpha mask into
  * `maskCanvas` (opaque white where the garment region is, transparent
@@ -96,7 +113,11 @@ export interface GarmentSegmentation {
  * that the mask visibly bled up onto the face and blurred it. This cuts the
  * mask off using the *face* pixels from the same part-segmentation pass —
  * found where the face's mean position is, sized by how many pixels it
- * covers — rather than trusting the torso part label near that boundary.
+ * covers — rather than trusting the torso part label near that boundary,
+ * with a soft fade instead of a hard edge. Separately, small holes inside
+ * the mask (an open collar's triangle of visible skin, say) are closed by
+ * blurring the raw part mask and re-thresholding before that cutoff is
+ * applied, so a real anatomical gap doesn't look like a rendering glitch.
  *
  * Every measurement here (garment centroid, face centroid, both pixel
  * counts) is a sum over every matching pixel, deliberately never a raw
@@ -130,6 +151,30 @@ export async function segmentGarmentMask(
   const cutoffY = facePixelCount > 0 ? faceSumY / facePixelCount + faceScale * FACE_TO_COLLAR_FACTOR : -Infinity;
   const transitionBand = faceScale * TRANSITION_BAND_FACTOR;
 
+  // Raw binary garment mask (no cutoff yet) — closing small internal holes
+  // has to happen before the collar cutoff's soft fade, otherwise the
+  // hole-filling blur would smear into that fade and distort it.
+  rawMaskCanvas.width = result.width;
+  rawMaskCanvas.height = result.height;
+  const rawCtx = rawMaskCanvas.getContext("2d");
+  if (!rawCtx) return { found: false, centroid: null };
+
+  const rawImageData = rawCtx.createImageData(result.width, result.height);
+  for (let i = 0; i < result.data.length; i++) {
+    rawImageData.data[i * 4 + 3] = GARMENT_PART_IDS.has(result.data[i]) ? 255 : 0;
+  }
+  rawCtx.putImageData(rawImageData, 0, 0);
+
+  closedMaskCanvas.width = result.width;
+  closedMaskCanvas.height = result.height;
+  const closedCtx = closedMaskCanvas.getContext("2d");
+  if (!closedCtx) return { found: false, centroid: null };
+  closedCtx.clearRect(0, 0, result.width, result.height);
+  closedCtx.filter = `blur(${HOLE_FILL_BLUR_PX}px)`;
+  closedCtx.drawImage(rawMaskCanvas, 0, 0);
+  closedCtx.filter = "none";
+  const closedAlpha = closedCtx.getImageData(0, 0, result.width, result.height).data;
+
   const imageData = ctx.createImageData(result.width, result.height);
   let sumX = 0;
   let sumY = 0;
@@ -145,10 +190,9 @@ export async function segmentGarmentMask(
       else if (y < cutoffY + transitionBand) fadeAlpha = (y - (cutoffY - transitionBand)) / (2 * transitionBand);
     }
     for (let x = 0; x < result.width; x++) {
-      const i = y * result.width + x;
-      const isGarmentPart = GARMENT_PART_IDS.has(result.data[i]);
-      const alpha = isGarmentPart ? Math.round(fadeAlpha * 255) : 0;
-      const offset = i * 4;
+      const offset = (y * result.width + x) * 4;
+      const isClosedGarment = closedAlpha[offset + 3] > HOLE_FILL_THRESHOLD;
+      const alpha = isClosedGarment ? Math.round(fadeAlpha * 255) : 0;
       imageData.data[offset] = 255;
       imageData.data[offset + 1] = 255;
       imageData.data[offset + 2] = 255;

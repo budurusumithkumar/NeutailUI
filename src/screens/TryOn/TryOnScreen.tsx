@@ -37,13 +37,13 @@ export function TryOnScreen() {
       </p>
 
       <div className="mt-6 grid gap-6 md:grid-cols-[1fr_320px]">
-        <div className="grid grid-cols-3 items-start gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-3 items-start gap-2 sm:grid-cols-4">
           {TSHIRTS.map((item) => (
             <button
               key={item.id}
               onClick={() => setSelectedId(item.id)}
               aria-pressed={item.id === selectedId}
-              className={`flex flex-col items-center gap-2 rounded-xl border p-3 transition ${
+              className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition ${
                 item.id === selectedId
                   ? "border-neutral-900 bg-neutral-50"
                   : "border-neutral-200 bg-white hover:border-neutral-300"

@@ -53,14 +53,22 @@ const SEGMENTATION_CONFIG = {
 // reasoning on GarmentCentroid below) — never a min/max over raw pixels,
 // which a single stray pixel anywhere (a hand mistaken for skin, say) can
 // drag arbitrarily far. FACE_TO_COLLAR_FACTOR estimates the total distance
-// from the face's own centroid down to where the collar legitimately starts
-// (roughly: half the face's height to reach the chin, plus a small gap for
-// the neck itself). A first attempt combined two separate factors (0.65 for
-// the chin + 0.45 for the neck = 1.1 total) and badly overshot on a real
-// photo — with a close-up face, that pushed the cutoff below the entire
-// visible torso, leaving almost nothing recolored. This is deliberately far
-// more conservative; it may still need tuning.
-const FACE_TO_COLLAR_FACTOR = 0.55;
+// from the face's own centroid down to where the collar legitimately starts.
+// A first attempt combined two factors totaling 1.1 and badly overshot,
+// cutting off almost the entire torso. The second (0.55, with ResNet50's
+// more accurate part boundary doing more of the work) was closer but still
+// clipped real shoulder-width torso pixels at the sides, visible as an
+// uneven notch and untouched collar fabric — because a real collar/neckline
+// isn't a flat horizontal line, so any single cutoff calibrated for the
+// lowest point (the center, above the neck) inevitably cuts too much at the
+// higher points (the shoulders). Lower still, and — combined with
+// TRANSITION_BAND below — softer at the boundary, so a residual mismatch
+// blends rather than showing as a hard edge.
+const FACE_TO_COLLAR_FACTOR = 0.35;
+// Width (in the same sqrt(facePixelCount) units) of the soft fade around the
+// cutoff line, instead of an abrupt on/off step — a harsh edge is what makes
+// any remaining miscalibration look broken rather than merely imperfect.
+const TRANSITION_BAND_FACTOR = 0.3;
 
 export interface GarmentCentroid {
   x: number;
@@ -118,10 +126,9 @@ export async function segmentGarmentMask(
       facePixelCount++;
     }
   }
-  const cutoffY =
-    facePixelCount > 0
-      ? faceSumY / facePixelCount + Math.sqrt(facePixelCount) * FACE_TO_COLLAR_FACTOR
-      : -Infinity;
+  const faceScale = facePixelCount > 0 ? Math.sqrt(facePixelCount) : 0;
+  const cutoffY = facePixelCount > 0 ? faceSumY / facePixelCount + faceScale * FACE_TO_COLLAR_FACTOR : -Infinity;
+  const transitionBand = faceScale * TRANSITION_BAND_FACTOR;
 
   const imageData = ctx.createImageData(result.width, result.height);
   let sumX = 0;
@@ -129,16 +136,24 @@ export async function segmentGarmentMask(
   let pixelCount = 0;
 
   for (let y = 0; y < result.height; y++) {
-    const aboveCutoff = y < cutoffY;
+    // A hard step here is what turns any leftover calibration error into a
+    // visible edge (or worse, a notch, since a real neckline isn't flat) —
+    // fading over `transitionBand` around the cutoff blends it instead.
+    let fadeAlpha = 1;
+    if (transitionBand > 0) {
+      if (y < cutoffY - transitionBand) fadeAlpha = 0;
+      else if (y < cutoffY + transitionBand) fadeAlpha = (y - (cutoffY - transitionBand)) / (2 * transitionBand);
+    }
     for (let x = 0; x < result.width; x++) {
       const i = y * result.width + x;
-      const isGarment = !aboveCutoff && GARMENT_PART_IDS.has(result.data[i]);
+      const isGarmentPart = GARMENT_PART_IDS.has(result.data[i]);
+      const alpha = isGarmentPart ? Math.round(fadeAlpha * 255) : 0;
       const offset = i * 4;
       imageData.data[offset] = 255;
       imageData.data[offset + 1] = 255;
       imageData.data[offset + 2] = 255;
-      imageData.data[offset + 3] = isGarment ? 255 : 0;
-      if (isGarment) {
+      imageData.data[offset + 3] = alpha;
+      if (alpha > 0) {
         sumX += x;
         sumY += y;
         pixelCount++;

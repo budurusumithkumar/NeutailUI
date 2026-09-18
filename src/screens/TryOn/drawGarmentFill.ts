@@ -71,4 +71,97 @@ export function drawGarmentFill(
   shading.addColorStop(1, "rgba(0,0,0,0.24)");
   ctx.fillStyle = shading;
   ctx.fillRect(0, 0, width, height);
+
+  if (centroid) {
+    drawFolds(ctx, centroid);
+  }
+}
+
+/**
+ * A first attempt at fold shading used three identical, perfectly straight,
+ * evenly-spaced vertical lines — which read as an obviously artificial
+ * repeating pattern rather than cloth, so it was pulled entirely. Real folds
+ * aren't like that: each one has a highlight on the side catching light and
+ * a shadow on the side falling away from it, they curve unevenly, and
+ * they're not evenly spaced or all the same length. This draws a handful of
+ * hand-designed fold curves (varied position/curvature/length, on purpose —
+ * not derived from any measurement) as highlight+shadow pairs, tapered via
+ * a gradient stroke so each one fades in and out along its length instead
+ * of starting and stopping abruptly, plus one diagonal crease for variety.
+ * All positions are fractions of `scale` (sqrt of the mask's pixel count)
+ * relative to its centroid, the same stable on-screen-size proxy used
+ * elsewhere in this file.
+ */
+function drawFolds(ctx: CanvasRenderingContext2D, centroid: GarmentCentroid): void {
+  const scale = Math.sqrt(centroid.pixelCount);
+  const cx = centroid.x;
+  const cy = centroid.y;
+
+  type Fold = { x0: number; y0: number; x1: number; y1: number; bow: number; width: number };
+  const verticalFolds: Fold[] = [
+    { x0: -0.3, y0: -0.5, x1: -0.19, y1: 0.68, bow: 0.05, width: 0.03 },
+    { x0: -0.05, y0: -0.58, x1: -0.13, y1: 0.5, bow: -0.04, width: 0.022 },
+    { x0: 0.11, y0: -0.42, x1: 0.02, y1: 0.72, bow: 0.06, width: 0.032 },
+    { x0: 0.29, y0: -0.3, x1: 0.23, y1: 0.6, bow: -0.05, width: 0.024 },
+  ];
+  const crease: Fold = { x0: -0.32, y0: 0.26, x1: 0.27, y1: 0.4, bow: 0.09, width: 0.034 };
+
+  for (const fold of verticalFolds) {
+    strokeFoldPair(ctx, cx, cy, scale, fold, "horizontal");
+  }
+  strokeFoldPair(ctx, cx, cy, scale, crease, "vertical");
+}
+
+function strokeFoldPair(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  scale: number,
+  fold: { x0: number; y0: number; x1: number; y1: number; bow: number; width: number },
+  lateralAxis: "horizontal" | "vertical",
+): void {
+  const x0 = cx + fold.x0 * scale;
+  const y0 = cy + fold.y0 * scale;
+  const x1 = cx + fold.x1 * scale;
+  const y1 = cy + fold.y1 * scale;
+  const bow = fold.bow * scale;
+  const width = Math.max(1.5, fold.width * scale);
+  const lateral = width * 0.55;
+
+  // The shadow sits on one side of the ridge, the highlight on the other —
+  // that contrast is what reads as a fold rather than a flat stroke.
+  strokeTaperedCurve(ctx, x0, y0, x1, y1, bow, width, "0,0,0", 0.16, lateral, lateralAxis);
+  strokeTaperedCurve(ctx, x0, y0, x1, y1, bow, width, "255,255,255", 0.18, -lateral, lateralAxis);
+}
+
+function strokeTaperedCurve(
+  ctx: CanvasRenderingContext2D,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  bow: number,
+  lineWidth: number,
+  rgb: string,
+  peakAlpha: number,
+  lateralOffset: number,
+  lateralAxis: "horizontal" | "vertical",
+): void {
+  const offsetX = lateralAxis === "horizontal" ? lateralOffset : 0;
+  const offsetY = lateralAxis === "vertical" ? lateralOffset : 0;
+  const midX = (x0 + x1) / 2 + (lateralAxis === "horizontal" ? bow : 0) + offsetX;
+  const midY = (y0 + y1) / 2 + (lateralAxis === "vertical" ? bow : 0) + offsetY;
+
+  const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+  gradient.addColorStop(0, `rgba(${rgb},0)`);
+  gradient.addColorStop(0.5, `rgba(${rgb},${peakAlpha})`);
+  gradient.addColorStop(1, `rgba(${rgb},0)`);
+
+  ctx.strokeStyle = gradient;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x0 + offsetX, y0 + offsetY);
+  ctx.quadraticCurveTo(midX, midY, x1 + offsetX, y1 + offsetY);
+  ctx.stroke();
 }

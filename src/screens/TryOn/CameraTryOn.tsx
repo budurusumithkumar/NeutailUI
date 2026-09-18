@@ -25,21 +25,31 @@ const STATE_MESSAGE: Record<Exclude<CameraState, "active">, string> = {
 };
 
 const DETECTION_INTERVAL_MS = 120;
+// Erase real color/pattern entirely (grayscale) while keeping genuine, live
+// fold/shadow shape — a blur this strong flattens printed stripes/logos into
+// an imperceptible smear, but a real 3D fold's brightness gradient is
+// broader than that and survives.
+const LIGHTING_BLUR_PX = 24;
+// "overlay" only lightens/darkens relative to mid-grey — real content, but
+// reduced opacity keeps it a subtle modulation rather than a heavy-handed one.
+const LIGHTING_OPACITY = 0.55;
 
 // Redraws the customer's *actual* shirt in the live camera feed as the
 // selected tee, instead of warping a synthetic shape over their body:
 // BodyPix (see bodySegmentation.ts) segments which pixels are torso/upper-arm
-// each frame, and the render loop draws a fully designed fill (color/pattern
-// plus deliberate gradient+fold shading — see drawGarmentFill.ts) clipped to
-// that exact shape, fully opaque, over the real video. An earlier version
-// tried blending with the backdrop's real luminance so folds would look
-// "real," but that let the customer's actual shirt texture/pattern show
-// through no matter how much it was pre-blurred, and read as a flat pasted-
-// on patch besides. Full replacement — nothing here is sampled from the live
-// video — removes that tension: the real shape still comes from live
-// tracking, but nothing of the real garment can leak through the fill. This
-// only works where a garment already is — it can't add one where there is
-// none, or change a collar/sleeve shape. Nothing captured leaves the browser.
+// each frame, and the render loop draws a flat, fully opaque color/pattern
+// fill (see drawGarmentFill.ts) clipped to that exact shape, over the real
+// video — two earlier versions either blended with the backdrop's real
+// luminance (let the customer's actual shirt texture/pattern show through no
+// matter how much it was pre-blurred) or hand-drew fixed fold curves (looked
+// artificial and ignored whatever the shirt was actually doing that moment).
+// This instead layers a *lighting-only* pass on top of the flat fill: the
+// real video, blurred hard enough to erase any printed pattern and fully
+// desaturated so no hue can carry through, composited with a lighten/darken-
+// only blend mode. The folds you see are real — driven by the customer's
+// actual posture/creases each frame — but carry no real color or pattern.
+// This only works where a garment already is — it can't add one where there
+// is none, or change a collar/sleeve shape. Nothing captured leaves the browser.
 export function CameraTryOn({ item }: { item: TshirtItem }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -47,6 +57,7 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
   const runningRef = useRef(false);
   const maskCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
   const fillCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
+  const lightingCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
   const centroidRef = useRef<GarmentCentroid | null>(null);
   const itemRef = useRef(item);
 
@@ -72,6 +83,8 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
 
     const fillCanvas = fillCanvasRef.current;
     const fillCtx = fillCanvas.getContext("2d");
+    const lightingCanvas = lightingCanvasRef.current;
+    const lightingCtx = lightingCanvas.getContext("2d");
 
     const frame = () => {
       if (!runningRef.current) return;
@@ -82,27 +95,50 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       const maskCanvas = maskCanvasRef.current;
-      if (fillCtx && maskCanvas.width > 0) {
+      if (fillCtx && lightingCtx && maskCanvas.width > 0) {
         fillCanvas.width = canvas.width;
         fillCanvas.height = canvas.height;
         fillCtx.clearRect(0, 0, fillCanvas.width, fillCanvas.height);
         drawGarmentFill(fillCtx, itemRef.current, fillCanvas.width, fillCanvas.height, centroidRef.current);
 
-        // Clip the designed fill to the real garment shape. The mask's alpha
-        // is already a soft fade at the collar boundary (see
+        // Clip the flat fill to the real garment shape. The mask's alpha is
+        // already a soft fade at the collar boundary (see
         // bodySegmentation.ts), not just a hard edge; the extra blur(3px)
-        // here only smooths the mask's own pixel-grid jaggedness, not a
-        // texture-erasure pass — there's no real video content left to erase
-        // once this is composited with plain source-over below.
+        // here only smooths the mask's own pixel-grid jaggedness.
         fillCtx.globalCompositeOperation = "destination-in";
         fillCtx.filter = "blur(3px)";
         fillCtx.drawImage(maskCanvas, 0, 0, fillCanvas.width, fillCanvas.height);
         fillCtx.filter = "none";
         fillCtx.globalCompositeOperation = "source-over";
 
-        // Plain source-over: fully opaque within the mask, so nothing of the
-        // real video shows through there — only soft at the mask's own edge.
+        // Plain source-over: fully opaque within the mask, so no real color
+        // or pattern shows through there — only soft at the mask's own edge.
         ctx.drawImage(fillCanvas, 0, 0);
+
+        // Real lighting, no real color: a hard blur erases any printed
+        // pattern while a genuine fold's broader brightness gradient
+        // survives, and grayscale strips out hue entirely so nothing of the
+        // actual garment's color can reappear through this pass.
+        lightingCanvas.width = canvas.width;
+        lightingCanvas.height = canvas.height;
+        lightingCtx.clearRect(0, 0, lightingCanvas.width, lightingCanvas.height);
+        lightingCtx.filter = `blur(${LIGHTING_BLUR_PX}px) grayscale(1)`;
+        lightingCtx.drawImage(video, 0, 0, lightingCanvas.width, lightingCanvas.height);
+        lightingCtx.filter = "none";
+        lightingCtx.globalCompositeOperation = "destination-in";
+        lightingCtx.filter = "blur(3px)";
+        lightingCtx.drawImage(maskCanvas, 0, 0, lightingCanvas.width, lightingCanvas.height);
+        lightingCtx.filter = "none";
+        lightingCtx.globalCompositeOperation = "source-over";
+
+        // "overlay" only lightens/darkens relative to mid-grey (no hue to
+        // carry, since the source is desaturated) — real fold shading, laid
+        // over the flat color instead of replacing it.
+        ctx.globalAlpha = LIGHTING_OPACITY;
+        ctx.globalCompositeOperation = "overlay";
+        ctx.drawImage(lightingCanvas, 0, 0);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
       }
 
       ctx.restore();

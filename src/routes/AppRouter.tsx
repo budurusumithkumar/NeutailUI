@@ -5,6 +5,7 @@ import { HomeScreen } from "../screens/Home/HomeScreen";
 import { LoginScreen } from "../screens/Login/LoginScreen";
 import { ProfileScreen } from "../screens/Profile/ProfileScreen";
 import { TryOnScreen } from "../screens/TryOn/TryOnScreen";
+import { TryOn3DScreen } from "../screens/TryOn3D/TryOn3DScreen";
 import { RequireAuth } from "./RequireAuth";
 
 export function AppRouter() {
@@ -32,6 +33,14 @@ export function AppRouter() {
         element={
           <RequireAuth>
             <TryOnScreen />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/try-on-3d"
+        element={
+          <RequireAuth>
+            <TryOn3DScreen />
           </RequireAuth>
         }
       />

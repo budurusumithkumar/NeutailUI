@@ -1,6 +1,19 @@
 # Photorealistic Try-On — Future Options (Proposal, Not Built)
 
-**Status:** Proposal / not scoped or built. Everything in this document is a sketch for a *possible future* iteration of the Wardrobe/Try-On screen, written up after the current live camera overlay hit a realism ceiling in testing. Nothing here changes what's shipped today (see [01-screens.md](01-screens.md) for the current, built version).
+**Status:** Proposal / not scoped or built, except for a time-boxed spike of Option B (see below). Everything else in this document is a sketch for a *possible future* iteration of the Wardrobe/Try-On screen, written up after the current live camera overlay hit a realism ceiling in testing. Nothing here changes what's shipped today (see [01-screens.md](01-screens.md) for the current, built version).
+
+## Spike results — Option B (WebGPU)
+
+A time-boxed spike was built at `src/screens/TryOn3D/` (route `/try-on-3d`, reachable only by direct URL — not linked from navigation, not integrated with the catalog). Scope matched the recommendation below exactly: one recolored mesh, live-rendered, on a tracked body, no occlusion, no fallback.
+
+**What it validates:**
+- `three@0.186.0`'s `WebGPURenderer` and `@mediapipe/tasks-vision`'s `PoseLandmarker` run concurrently in the same render loop without contention — sustained **60fps** in testing (WebGPU render + pose inference at a 60ms detection interval).
+- A 9-vertex/8-triangle mesh, deformed each frame from tracked shoulder/hip landmarks with a forward Z bulge at the chest, reads as genuinely 3D — real geometry and lighting respond correctly to whatever pose the body is in, which is the specific thing 2D canvas compositing (the shipped feature) cannot do.
+- `navigator.gpu` and a real WebGPU adapter/device are available in this project's own test environment, which was itself an open question going in.
+
+**Not validated (out of scope for this spike, and still open questions):** real-world tracking accuracy/robustness (only synthetic test fixtures were exercised, since the environment used to build this has no real camera), occlusion, mobile/Safari WebGPU support, a WebGL fallback path, and integration with the actual catalog (the spike hardcodes one shirt color).
+
+**One non-obvious pitfall worth flagging for anyone building on this further:** a `MeshBasicMaterial` background quad placed *behind* the tracked mesh (for the camera passthrough) came out fully transparent with three.js's default `side: THREE.FrontSide` — it needed `side: THREE.DoubleSide` to render at all. Easy to lose time to since it fails silently (no console error, no exception — the canvas just renders as transparent, which read as solid black against the page background).
 
 ## Why this exists
 

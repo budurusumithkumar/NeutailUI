@@ -14,4 +14,4 @@ Once these are confirmed, React code generation proceeds screen-by-screen agains
 
 ## Proposals (not built)
 
-- [07-photorealistic-tryon-options.md](07-photorealistic-tryon-options.md) — the live camera try-on's realism ceiling, and two sketched (unbuilt) options to get past it: a backend-mediated AI-generated snapshot, or a WebGPU-based live 3D render.
+- [07-photorealistic-tryon-options.md](07-photorealistic-tryon-options.md) — the live camera try-on's realism ceiling, and two sketched options to get past it: a backend-mediated AI-generated snapshot (unbuilt), or a WebGPU-based live 3D render (time-boxed spike built at `src/screens/TryOn3D/`, route `/try-on-3d`, not linked from navigation — see the doc for results).

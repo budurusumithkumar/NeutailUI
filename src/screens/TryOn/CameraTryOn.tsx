@@ -26,16 +26,20 @@ const STATE_MESSAGE: Record<Exclude<CameraState, "active">, string> = {
 
 const DETECTION_INTERVAL_MS = 120;
 
-// Recolors the customer's *actual* shirt in the live camera feed to the
-// selected tee, instead of warping a synthetic shape over their body: BodyPix
-// (see bodySegmentation.ts) segments which pixels are torso/upper-arm each
-// frame, the backdrop is softened (blurred) within that region to erase the
-// real garment's own pattern while keeping broad fold/shadow shading, and the
-// render loop blends the selected color/pattern on top using the canvas
-// "color" composite mode, which keeps that (now-softened) backdrop luminance
-// and only swaps hue/saturation. This only recolors clothing that's already
-// there — it can't add a garment where there is none, or change a collar/
-// sleeve shape. Nothing captured leaves the browser.
+// Redraws the customer's *actual* shirt in the live camera feed as the
+// selected tee, instead of warping a synthetic shape over their body:
+// BodyPix (see bodySegmentation.ts) segments which pixels are torso/upper-arm
+// each frame, and the render loop draws a fully designed fill (color/pattern
+// plus deliberate gradient+fold shading — see drawGarmentFill.ts) clipped to
+// that exact shape, fully opaque, over the real video. An earlier version
+// tried blending with the backdrop's real luminance so folds would look
+// "real," but that let the customer's actual shirt texture/pattern show
+// through no matter how much it was pre-blurred, and read as a flat pasted-
+// on patch besides. Full replacement — nothing here is sampled from the live
+// video — removes that tension: the real shape still comes from live
+// tracking, but nothing of the real garment can leak through the fill. This
+// only works where a garment already is — it can't add one where there is
+// none, or change a collar/sleeve shape. Nothing captured leaves the browser.
 export function CameraTryOn({ item }: { item: TshirtItem }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -43,7 +47,6 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
   const runningRef = useRef(false);
   const maskCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
   const fillCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
-  const softCanvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
   const centroidRef = useRef<GarmentCentroid | null>(null);
   const itemRef = useRef(item);
 
@@ -69,8 +72,6 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
 
     const fillCanvas = fillCanvasRef.current;
     const fillCtx = fillCanvas.getContext("2d");
-    const softCanvas = softCanvasRef.current;
-    const softCtx = softCanvas.getContext("2d");
 
     const frame = () => {
       if (!runningRef.current) return;
@@ -81,40 +82,27 @@ export function CameraTryOn({ item }: { item: TshirtItem }) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       const maskCanvas = maskCanvasRef.current;
-      if (fillCtx && softCtx && maskCanvas.width > 0) {
-        // The "color" blend below keeps the backdrop's real luminance — but the
-        // customer's actual shirt often already has its own pattern (stripes,
-        // a logo) baked into that luminance as light/dark bands, which then
-        // shows through underneath whatever we draw. Softening the backdrop
-        // first blurs away that existing pattern's fine detail while keeping
-        // the broader fold/shadow shading, so the *selected* pattern reads
-        // clearly instead of visually fighting the real one.
-        softCanvas.width = canvas.width;
-        softCanvas.height = canvas.height;
-        softCtx.filter = "blur(14px)";
-        softCtx.drawImage(video, 0, 0, softCanvas.width, softCanvas.height);
-        softCtx.filter = "none";
-        softCtx.globalCompositeOperation = "destination-in";
-        softCtx.drawImage(maskCanvas, 0, 0, softCanvas.width, softCanvas.height);
-        softCtx.globalCompositeOperation = "source-over";
-        ctx.drawImage(softCanvas, 0, 0);
-
+      if (fillCtx && maskCanvas.width > 0) {
         fillCanvas.width = canvas.width;
         fillCanvas.height = canvas.height;
         fillCtx.clearRect(0, 0, fillCanvas.width, fillCanvas.height);
         drawGarmentFill(fillCtx, itemRef.current, fillCanvas.width, fillCanvas.height, centroidRef.current);
 
+        // Clip the designed fill to the real garment shape. The mask's alpha
+        // is already a soft fade at the collar boundary (see
+        // bodySegmentation.ts), not just a hard edge; the extra blur(3px)
+        // here only smooths the mask's own pixel-grid jaggedness, not a
+        // texture-erasure pass — there's no real video content left to erase
+        // once this is composited with plain source-over below.
         fillCtx.globalCompositeOperation = "destination-in";
         fillCtx.filter = "blur(3px)";
         fillCtx.drawImage(maskCanvas, 0, 0, fillCanvas.width, fillCanvas.height);
         fillCtx.filter = "none";
         fillCtx.globalCompositeOperation = "source-over";
 
-        // "color" keeps the (now-softened) backdrop's luminance — the real
-        // fold/shadow shading — and only takes hue+saturation from our fill.
-        ctx.globalCompositeOperation = "color";
+        // Plain source-over: fully opaque within the mask, so nothing of the
+        // real video shows through there — only soft at the mask's own edge.
         ctx.drawImage(fillCanvas, 0, 0);
-        ctx.globalCompositeOperation = "source-over";
       }
 
       ctx.restore();

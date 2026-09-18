@@ -49,6 +49,24 @@ export function drawGarmentFill(
     }
   }
 
+  if (item.pattern === "zigzag" && item.accent) {
+    ctx.strokeStyle = item.accent;
+    ctx.lineWidth = 6;
+    const amplitude = 14;
+    const period = 28;
+    const rowGap = 40;
+    for (let y = 30; y < height; y += rowGap) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      let up = true;
+      for (let x = period / 2; x < width + period; x += period / 2) {
+        ctx.lineTo(x, up ? y - amplitude : y + amplitude);
+        up = !up;
+      }
+      ctx.stroke();
+    }
+  }
+
   if (item.pattern === "graphic" && item.accent && centroid) {
     const scale = Math.sqrt(centroid.pixelCount);
     const centerX = centroid.x;

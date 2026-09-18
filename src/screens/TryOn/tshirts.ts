@@ -4,7 +4,7 @@
 // Artwork is generated inline as SVG (see TshirtGraphics.tsx) rather than fetched
 // images, so the catalog only needs color/pattern data, not image URLs.
 
-export type TshirtPattern = "solid" | "striped" | "graphic";
+export type TshirtPattern = "solid" | "striped" | "graphic" | "zigzag";
 
 export interface TshirtItem {
   id: string;
@@ -57,5 +57,21 @@ export const TSHIRTS: TshirtItem[] = [
     color: "#3a6b4c",
     accent: "#f2c14e",
     pattern: "graphic",
+  },
+  {
+    id: "tee-15",
+    name: "Chevron Zigzag Tee",
+    price_gbp: 22,
+    color: "#eef0ec",
+    accent: "#1c1c1e",
+    pattern: "zigzag",
+  },
+  {
+    id: "tee-16",
+    name: "Electric Zigzag Tee",
+    price_gbp: 23,
+    color: "#1f2f4d",
+    accent: "#f2c14e",
+    pattern: "zigzag",
   },
 ];

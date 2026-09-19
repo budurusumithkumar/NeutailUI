@@ -43,12 +43,12 @@
 1. On app load, if a token exists in storage, call `GET /api/v1/auth/me` to validate it.
    - Valid → restore user, go to last route (default Home).
    - 401 → clear token, go to Login.
-2. If a `session_id` was persisted (e.g. in `sessionStorage`) and the user lands back on Chat, call `GET /api/v1/sessions/{session_id}/context` to rehydrate `current_intent`, `selected_sku`, etc., so the UI can restore relevant UI state (e.g. re-show which product was last selected). The message transcript itself is **not** returned by the contract — see Gap #2 — so on reload the transcript restarts empty even though backend session state persists.
+2. If a customer-scoped `session_id` was persisted in `sessionStorage` and the user lands back on Chat, reuse that session and its client-cached transcript. The transcript is a per-session UI cache only; the backend contract still does **not** return message history (see Gap #2).
 
 ## Flow G — Logout
 1. User taps Logout (Profile or header).
 2. `POST /api/v1/auth/logout` (best-effort — proceed to clear local state even if it fails/network drops).
-3. Clear token, user, session id, and navigate to Login. Cart is deliberately **not** cleared on logout (so a returning guest doesn't lose their cart) — cart is scoped by browser storage, not by user, in this phase (see Gap #1 for the multi-user caveat).
+3. Clear token, user, that customer's session id/transcript, and server-query cache, then navigate to Login. The cart remains in local storage but is keyed by customer ID; it is hidden at logout and the next authenticated customer's cart is loaded.
 
 ## Flow H — Error handling (cross-cutting)
 - Any `401` response mid-session → clear auth, redirect to Login with "session expired" message (Flow A's inverse).

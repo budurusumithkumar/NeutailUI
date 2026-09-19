@@ -33,6 +33,8 @@ npm run dev
 
 ## Cart scope
 Cart contents remain client-side (`src/cart/`) behind a `CartRepository`
-interface, so they do not sync across devices. The demo checkout is not a full
-commerce cart API: it commits a purchase event using authoritative backend
-product prices so the profiling sequence can be demonstrated end to end.
+interface and are partitioned by authenticated customer ID, so customers sharing
+a browser do not see one another's cart. They still do not sync across devices.
+The demo checkout is not a full commerce cart API: it commits a purchase event
+using authoritative backend product prices so the profiling sequence can be
+demonstrated end to end.

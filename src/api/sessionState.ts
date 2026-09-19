@@ -1,28 +1,48 @@
-// The active chat session id is tab-scoped (a session is one visit's conversation,
-// not a durable account artifact — docs/03-api-integration.md), so it lives in
-// sessionStorage rather than in a global store.
+// Chat remains tab-scoped, but every authenticated customer gets a separate key.
+// This prevents a second customer using the same browser tab from inheriting the
+// previous customer's backend session or cached transcript.
+const LEGACY_SESSION_ID_KEY = "neutail_session_id";
+const SESSION_ID_KEY_PREFIX = "neutail_session_id_";
+const TRANSCRIPT_KEY_PREFIX = "neutail_transcript_";
 
-const SESSION_ID_KEY = "neutail_session_id";
+function sessionKey(customerId: string): string {
+  return `${SESSION_ID_KEY_PREFIX}${encodeURIComponent(customerId)}`;
+}
 
-export function getStoredSessionId(): string | null {
+export function getTranscriptStorageKey(sessionId: string): string {
+  return `${TRANSCRIPT_KEY_PREFIX}${sessionId}`;
+}
+
+export function getStoredSessionId(customerId: string): string | null {
   try {
-    return sessionStorage.getItem(SESSION_ID_KEY);
+    return sessionStorage.getItem(sessionKey(customerId));
   } catch {
     return null;
   }
 }
 
-export function setStoredSessionId(sessionId: string): void {
+export function setStoredSessionId(customerId: string, sessionId: string): void {
   try {
-    sessionStorage.setItem(SESSION_ID_KEY, sessionId);
+    sessionStorage.setItem(sessionKey(customerId), sessionId);
   } catch {
     // ignore — worst case we create a new session next time
   }
 }
 
-export function clearStoredSessionId(): void {
+export function clearStoredSession(customerId: string): void {
   try {
-    sessionStorage.removeItem(SESSION_ID_KEY);
+    const customerSessionId = sessionStorage.getItem(sessionKey(customerId));
+    if (customerSessionId) {
+      sessionStorage.removeItem(getTranscriptStorageKey(customerSessionId));
+    }
+    sessionStorage.removeItem(sessionKey(customerId));
+
+    // Remove state created by older UI versions without assigning it to any user.
+    const legacySessionId = sessionStorage.getItem(LEGACY_SESSION_ID_KEY);
+    if (legacySessionId) {
+      sessionStorage.removeItem(getTranscriptStorageKey(legacySessionId));
+    }
+    sessionStorage.removeItem(LEGACY_SESSION_ID_KEY);
   } catch {
     // ignore
   }

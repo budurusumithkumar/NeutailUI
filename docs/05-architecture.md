@@ -46,7 +46,7 @@ src/
 ## State ownership rules (to keep this maintainable)
 - **Global:** auth (token/user), cart. Nothing else.
 - **Route-local:** chat transcript, session id, per-screen loading/error — via TanStack Query + local component state.
-- **No component reaches into `localStorage`/`sessionStorage` directly** except `LocalCartRepository` and the sessionStorage transcript cache — everything else goes through the `api/` and `cart/` modules.
+- **No component reaches into `localStorage`/`sessionStorage` directly** except `LocalCartRepository`, `sessionState`, and the sessionStorage transcript cache. Cart and chat storage are selected by the authenticated customer ID; everything else goes through the `api/` and `cart/` modules.
 
 ## Auth guard
 `RequireAuth` wraps every route except Login: checks `authStore` for a token; if absent, calls `getCurrentUser` once to validate a token that might exist from a previous visit (Flow F); on any 401 anywhere, the Axios interceptor clears `authStore` and the router redirects to `/login`.

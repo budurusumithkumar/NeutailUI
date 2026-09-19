@@ -1,8 +1,9 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../../api/auth";
+import { clearStoredSession } from "../../api/sessionState";
 import type { ErrorResponse } from "../../api/types";
 import { useAuthStore } from "../../auth/authStore";
 import { Button } from "../../components/Button";
@@ -17,6 +18,7 @@ function describeLoginError(error: unknown): string | null {
 
 export function LoginScreen() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setSession = useAuthStore((state) => state.setSession);
   const sessionExpired = useAuthStore((state) => state.sessionExpired);
   const acknowledgeSessionExpired = useAuthStore((state) => state.acknowledgeSessionExpired);
@@ -27,6 +29,8 @@ export function LoginScreen() {
   const loginMutation = useMutation({
     mutationFn: login,
     onSuccess: (data) => {
+      clearStoredSession(data.user.customer_id);
+      queryClient.removeQueries();
       acknowledgeSessionExpired();
       setSession(data.access_token, data.user);
       navigate("/", { replace: true });

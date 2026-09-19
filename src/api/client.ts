@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "../auth/authStore";
+import { clearStoredSession } from "./sessionState";
 
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -22,7 +23,11 @@ apiClient.interceptors.response.use(
   (error) => {
     const isLoginCall = error.config?.url?.includes("/api/v1/auth/login");
     if (error.response?.status === 401 && !isLoginCall) {
-      useAuthStore.getState().handleUnauthorized();
+      const auth = useAuthStore.getState();
+      if (auth.user?.customer_id) {
+        clearStoredSession(auth.user.customer_id);
+      }
+      auth.handleUnauthorized();
     }
     return Promise.reject(error);
   },

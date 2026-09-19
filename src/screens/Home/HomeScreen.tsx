@@ -47,14 +47,17 @@ export function HomeScreen() {
   const [detailProduct, setDetailProduct] = useState<ProductCardType | null>(null);
   const [homeUpsell, setHomeUpsell] = useState<HomeUpsell | null>(null);
   const [isRecordingUpsellAction, setIsRecordingUpsellAction] = useState(false);
+  const customerId = user?.customer_id;
 
   const summaryQuery = useQuery({
-    queryKey: ["customer", "summary"],
+    queryKey: ["customer", "summary", customerId],
     queryFn: getCustomerSummary,
+    enabled: Boolean(customerId),
   });
   const recommendationsQuery = useQuery({
-    queryKey: ["recommendations", "home"],
+    queryKey: ["recommendations", "home", customerId],
     queryFn: () => getHomeRecommendations(8),
+    enabled: Boolean(customerId),
     staleTime: 2 * 60 * 1000,
   });
 
@@ -62,9 +65,10 @@ export function HomeScreen() {
   const cartSubtotal = useCartSubtotal();
 
   async function handleStartChat() {
+    if (!customerId) return;
     setStartingChat(true);
     try {
-      await ensureSession();
+      await ensureSession(customerId);
       navigate("/chat");
     } catch {
       showToast("Couldn't reach Neu.Tail. Please try again.", "error");
@@ -91,9 +95,10 @@ export function HomeScreen() {
     rank: number,
   ) {
     setDetailProduct(product);
+    if (!customerId) return;
     const idempotencyKey = `home-product-view-${crypto.randomUUID()}`;
 
-    void ensureSession()
+    void ensureSession(customerId)
       .then(async (sessionId) => {
         const engagement = await recordProductView(sessionId, product.sku, {
           idempotencyKey,
@@ -123,9 +128,10 @@ export function HomeScreen() {
   }
 
   async function handleAskFit(product: ProductCardType) {
+    if (!customerId) return;
     setDetailProduct(null);
     try {
-      await ensureSession();
+      await ensureSession(customerId);
       navigate("/chat", {
         state: {
           selectedSku: product.sku,

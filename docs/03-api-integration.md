@@ -22,12 +22,12 @@ Sources of truth: [`NeuTail_Mission4_UI_Backend_OpenAPI.json`](../NeuTail_Missio
 ### Gap #1 — No cart endpoints
 There is no `Cart`, `CartItem`, or any `/cart` path in the OpenAPI file. The user requirement ("add items to cart") is real, so the frontend implements cart as **client-side state**, isolated behind a `CartRepository` interface (see [05-architecture.md](05-architecture.md)) with a `localStorage` implementation. This means:
 - Cart does **not** sync across devices/browsers for the same user.
-- Cart survives logout (see Flow G) but is keyed to the browser, not the account.
+- Cart storage is partitioned by authenticated `customer_id`, so two customers sharing a browser do not see one another's items. A customer's local cart is restored when that customer signs in again on the same browser.
 - When the backend team adds real cart endpoints, only the `CartRepository` implementation changes — no screen/component should call `localStorage` directly.
 - **Action for backend team:** flag that a `POST /api/v1/cart/items`, `GET /api/v1/cart`, `DELETE /api/v1/cart/items/{id}` (or similar) set of endpoints would be needed to make cart durable and account-scoped.
 
 ### Gap #2 — No chat transcript persistence/retrieval
-`SessionContext` returns intent/slots but not prior messages. On reload, the visual transcript is rebuilt empty even though the backend still has session state. Mitigation: persist the transcript client-side per `session_id` (e.g. `sessionStorage`) purely for UX continuity within the same browser tab; treat it as a cache, not a source of truth.
+`SessionContext` returns intent/slots but not prior messages. Mitigation: persist the transcript client-side per `session_id` in `sessionStorage` purely for UX continuity within the same browser tab; treat it as a cache, not a source of truth. Session IDs are keyed by authenticated customer and the session/transcript are removed at logout, so they cannot cross customer boundaries.
 
 ### Gap #3 — No "list my sessions" endpoint
 Only single-session `GET`/`DELETE`/`POST` exist. A "past conversations" screen isn't buildable against the current contract; deferred (see [01-screens.md](01-screens.md) out-of-scope list).
@@ -44,4 +44,4 @@ upload video or segmentation data.
 ## Auth/session lifecycle contract
 - Bearer token attached via an Axios/fetch interceptor to every call except `login` and `health`.
 - A single 401-handling interceptor triggers the "session expired" flow (Flow H) — no per-screen 401 handling.
-- `session_id` lives in `sessionStorage` (tab-scoped, cleared on tab close) since a session is a single visit's conversation, not a durable account artifact.
+- `session_id` lives in `sessionStorage`, keyed by authenticated customer (tab-scoped, cleared on logout or tab close), since a session is a single visit's conversation, not a durable account artifact.

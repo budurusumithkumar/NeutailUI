@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { logout as logoutRequest } from "../../api/auth";
 import { getCustomerSummary } from "../../api/customer";
+import { clearStoredSession } from "../../api/sessionState";
 import { useAuthStore } from "../../auth/authStore";
 import { AppLayout } from "../../components/AppLayout";
 import { Button } from "../../components/Button";
@@ -9,11 +10,14 @@ import { Chip } from "../../components/Chip";
 
 export function ProfileScreen() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
   const clearAuth = useAuthStore((state) => state.clear);
 
   const summaryQuery = useQuery({
-    queryKey: ["customer", "summary"],
+    queryKey: ["customer", "summary", user?.customer_id],
     queryFn: getCustomerSummary,
+    enabled: Boolean(user?.customer_id),
   });
 
   async function handleLogout() {
@@ -22,6 +26,10 @@ export function ProfileScreen() {
     } catch {
       // best-effort — proceed to clear local state regardless (docs/02-user-flows.md, Flow G)
     }
+    if (user?.customer_id) {
+      clearStoredSession(user.customer_id);
+    }
+    queryClient.removeQueries();
     clearAuth();
     navigate("/login", { replace: true });
   }

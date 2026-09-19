@@ -3,7 +3,9 @@ import { localCartRepository } from "./LocalCartRepository";
 import type { CartItem } from "./types";
 
 interface CartState {
+  ownerId: string | null;
   items: CartItem[];
+  setOwner: (ownerId: string | null) => void;
   addItem: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
   updateQuantity: (sku: string, size: string | null, quantity: number) => void;
   removeItem: (sku: string, size: string | null) => void;
@@ -11,17 +13,50 @@ interface CartState {
 }
 
 export const useCartStore = create<CartState>((set) => ({
-  items: localCartRepository.getItems(),
+  ownerId: null,
+  items: [],
+
+  setOwner: (ownerId) =>
+    set((state) => {
+      if (state.ownerId === ownerId) return state;
+      return {
+        ownerId,
+        items: ownerId ? localCartRepository.getItems(ownerId) : [],
+      };
+    }),
 
   addItem: (item, quantity) =>
-    set({ items: localCartRepository.addItem(item, quantity) }),
+    set((state) =>
+      state.ownerId
+        ? { items: localCartRepository.addItem(state.ownerId, item, quantity) }
+        : state,
+    ),
 
   updateQuantity: (sku, size, quantity) =>
-    set({ items: localCartRepository.updateQuantity(sku, size, quantity) }),
+    set((state) =>
+      state.ownerId
+        ? {
+            items: localCartRepository.updateQuantity(
+              state.ownerId,
+              sku,
+              size,
+              quantity,
+            ),
+          }
+        : state,
+    ),
 
-  removeItem: (sku, size) => set({ items: localCartRepository.removeItem(sku, size) }),
+  removeItem: (sku, size) =>
+    set((state) =>
+      state.ownerId
+        ? { items: localCartRepository.removeItem(state.ownerId, sku, size) }
+        : state,
+    ),
 
-  clear: () => set({ items: localCartRepository.clear() }),
+  clear: () =>
+    set((state) =>
+      state.ownerId ? { items: localCartRepository.clear(state.ownerId) } : state,
+    ),
 }));
 
 export function useCartCount(): number {

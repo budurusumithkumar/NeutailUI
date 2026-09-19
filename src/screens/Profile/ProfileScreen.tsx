@@ -40,6 +40,8 @@ export function ProfileScreen() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {summary.segment && <Chip tone="success">{summary.segment}</Chip>}
+            {summary.loyalty_status && <Chip>{summary.loyalty_status} customer</Chip>}
             {summary.loyalty_tier && <Chip tone="success">{summary.loyalty_tier} tier</Chip>}
             {typeof summary.points_balance === "number" && (
               <Chip>{summary.points_balance} points</Chip>
@@ -47,6 +49,18 @@ export function ProfileScreen() {
             {summary.usual_size && <Chip>Usual size: {summary.usual_size}</Chip>}
             {summary.fit_preference && <Chip>Fit: {summary.fit_preference}</Chip>}
           </div>
+
+          {summary.previous_segment && summary.segment_changed_at && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-medium text-emerald-950">Latest profile update</p>
+              <p className="mt-1 text-sm text-emerald-900">
+                {summary.previous_segment} → {summary.segment}
+              </p>
+              <p className="mt-1 text-xs text-emerald-800">
+                Based on {summary.purchase_count_90d ?? 0} completed purchases in 90 days · Profile version {summary.profile_version}
+              </p>
+            </div>
+          )}
 
           {summary.preferred_categories.length > 0 && (
             <div>

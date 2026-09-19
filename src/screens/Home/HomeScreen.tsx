@@ -185,12 +185,20 @@ export function HomeScreen() {
         {summary && (
           <div className="rounded-2xl border border-neutral-200 bg-white p-5">
             <div className="flex flex-wrap items-center gap-2">
+              {summary.segment && <Chip tone="success">{summary.segment}</Chip>}
+              {summary.loyalty_status && <Chip>{summary.loyalty_status} customer</Chip>}
               {summary.loyalty_tier && <Chip tone="success">{summary.loyalty_tier} tier</Chip>}
               {typeof summary.points_balance === "number" && (
                 <Chip>{summary.points_balance} points</Chip>
               )}
               {summary.usual_size && <Chip>Usual size: {summary.usual_size}</Chip>}
             </div>
+
+            {summary.previous_segment && summary.segment_changed_at && (
+              <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                Profile refreshed: {summary.previous_segment} → {summary.segment} after {summary.purchase_count_90d ?? 0} recent purchases.
+              </p>
+            )}
 
             {summary.preferred_styles.length > 0 && (
               <div className="mt-4">

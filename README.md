@@ -7,6 +7,12 @@ The authenticated Home screen now loads in-stock product sections from
 and preferences. Product cards support detail views, local cart actions,
 engagement-triggered governed Upsell, and a Fit handoff into Chat.
 
+The Cart now supports a local demo checkout through
+`POST /api/v1/demo/checkout`. A successful purchase displays the committed
+profiling/loyalty transition and refreshes Home recommendations plus the
+customer summary. The login screen includes Alice (Affluent) and Bob
+(non-affluent) selectors for the third-purchase segmentation demo.
+
 **Start with [docs/README.md](docs/README.md)** — the SDD (spec-driven development) artifacts written before this code, covering scope, screens, user flows, the API integration map (including contract gaps like cart), the chat-response rendering contract, and architecture. Read those before making structural changes here.
 
 ## Stack
@@ -25,5 +31,8 @@ npm run dev
 - `npm run lint` — oxlint.
 - `npm run preview` — preview the production build locally.
 
-## Notable gap: Cart
-There is no cart endpoint in the current API contract. Cart is implemented client-side (`src/cart/`) behind a `CartRepository` interface with a `localStorage` implementation, so it does not sync across devices yet. See Gap #1 in [docs/03-api-integration.md](docs/03-api-integration.md) for what the backend would need to add to make it durable and account-scoped.
+## Cart scope
+Cart contents remain client-side (`src/cart/`) behind a `CartRepository`
+interface, so they do not sync across devices. The demo checkout is not a full
+commerce cart API: it commits a purchase event using authoritative backend
+product prices so the profiling sequence can be demonstrated end to end.

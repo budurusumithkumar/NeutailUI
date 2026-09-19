@@ -231,13 +231,58 @@ export interface CustomerSummary {
   display_name: string;
   city?: string | null;
   segment?: string | null;
+  loyalty_status?: string | null;
   loyalty_tier?: string | null;
   points_balance?: number | null;
+  profile_version: number;
+  previous_segment?: string | null;
+  segment_changed_at?: string | null;
+  purchase_count_90d?: number | null;
   preferred_categories: string[];
   preferred_colors: string[];
   preferred_styles: string[];
   usual_size?: string | null;
   fit_preference?: string | null;
+}
+
+export interface DemoCheckoutItem {
+  sku: string;
+  quantity: number;
+  size?: string | null;
+  color?: string | null;
+}
+
+export interface DemoCheckoutRequest {
+  idempotency_key: string;
+  occurred_at: string;
+  items: DemoCheckoutItem[];
+}
+
+export interface SegmentTransition {
+  previous_segment?: string | null;
+  new_segment: string;
+  previous_loyalty_status?: string | null;
+  new_loyalty_status: string;
+  changed: boolean;
+  changed_at: string;
+  policy_version: string;
+}
+
+export interface PurchaseEventResult {
+  event_id: string;
+  event_type: "PURCHASE_COMPLETED";
+  status: "COMPLETED";
+  replayed: boolean;
+  customer_id: string;
+  order_id: string;
+  purchase_count_90d: number;
+  profile_version: number;
+  transition: SegmentTransition;
+  points_transaction_id?: string | null;
+  points_delta?: number | null;
+  points_balance?: number | null;
+  customer_context?: (CustomerContextSummary & { profile_version?: string }) | null;
+  outbox_ids: string[];
 }
 
 export interface ErrorResponse {

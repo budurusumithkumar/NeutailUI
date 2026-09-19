@@ -35,6 +35,11 @@ export function LoginScreen() {
 
   const errorMessage = describeLoginError(loginMutation.error);
 
+  function selectDemoCustomer(customer: "alice" | "bob") {
+    setEmail(`${customer}.demo@demo.neutail.local`);
+    setPassword("demo");
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
       <form
@@ -47,6 +52,23 @@ export function LoginScreen() {
         <div>
           <h1 className="text-xl font-semibold">Sign in to Neu.Tail</h1>
           <p className="mt-1 text-sm text-neutral-500">Your personal style assistant.</p>
+        </div>
+
+        <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+            Segmentation demo
+          </p>
+          <p className="mt-1 text-xs text-neutral-500">
+            Both customers begin with two qualifying purchases. Checkout once to see their segment change.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Button type="button" variant="secondary" onClick={() => selectDemoCustomer("alice")}>
+              Alice · Affluent
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => selectDemoCustomer("bob")}>
+              Bob · Non-affluent
+            </Button>
+          </div>
         </div>
 
         {sessionExpired && (

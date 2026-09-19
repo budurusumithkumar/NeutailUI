@@ -3,10 +3,18 @@ import { normalizeUpsellResult } from "./chatResponseAdapter";
 import type {
   EngagementEventInput,
   EngagementEventResponse,
+  PendingUpsellDecision,
   UpsellDecisionEventInput,
   UpsellDecisionEventResponse,
   UpsellDecisionEventType,
 } from "./types";
+
+export async function getPendingUpsellDecisions(): Promise<PendingUpsellDecision[]> {
+  const { data } = await apiClient.get<PendingUpsellDecision[]>(
+    "/api/v1/upsell/decisions/pending",
+  );
+  return data;
+}
 
 type WireEngagementEventResponse = Omit<
   EngagementEventResponse,

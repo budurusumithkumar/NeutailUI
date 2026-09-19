@@ -1,10 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ensureSession } from "../../api/ensureSession";
 import { getCustomerSummary } from "../../api/customer";
 import { getHomeRecommendations } from "../../api/recommendations";
 import {
+  getPendingUpsellDecisions,
   recordProductView,
   recordUpsellDecisionEvent,
 } from "../../api/upsell";
@@ -40,6 +41,7 @@ interface HomeUpsell {
 
 export function HomeScreen() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { showToast } = useToast();
   const user = useAuthStore((state) => state.user);
   const addToCart = useCartStore((state) => state.addItem);
@@ -47,6 +49,7 @@ export function HomeScreen() {
   const [detailProduct, setDetailProduct] = useState<ProductCardType | null>(null);
   const [homeUpsell, setHomeUpsell] = useState<HomeUpsell | null>(null);
   const [isRecordingUpsellAction, setIsRecordingUpsellAction] = useState(false);
+  const productViewKeysRef = useRef(new Map<string, string>());
   const customerId = user?.customer_id;
 
   const summaryQuery = useQuery({
@@ -60,6 +63,24 @@ export function HomeScreen() {
     enabled: Boolean(customerId),
     staleTime: 2 * 60 * 1000,
   });
+  const pendingUpsellQuery = useQuery({
+    queryKey: ["upsell", "pending", customerId],
+    queryFn: getPendingUpsellDecisions,
+    enabled: Boolean(customerId),
+    refetchInterval: 10_000,
+  });
+
+  const pendingUpsell = pendingUpsellQuery.data?.[0];
+  const displayedUpsell: HomeUpsell | null =
+    homeUpsell ??
+    (pendingUpsell
+      ? {
+          result: pendingUpsell.upsell_result,
+          sessionId: pendingUpsell.session_id,
+          traceId:
+            pendingUpsell.trace_id ?? `pending-${pendingUpsell.decision_id}`,
+        }
+      : null);
 
   const cartCount = useCartCount();
   const cartSubtotal = useCartSubtotal();
@@ -96,7 +117,11 @@ export function HomeScreen() {
   ) {
     setDetailProduct(product);
     if (!customerId) return;
-    const idempotencyKey = `home-product-view-${crypto.randomUUID()}`;
+    const attemptKey = `${recommendationId}:${sectionId}:${rank}:${product.sku}`;
+    const idempotencyKey =
+      productViewKeysRef.current.get(attemptKey) ??
+      `home-product-view-${crypto.randomUUID()}`;
+    productViewKeysRef.current.set(attemptKey, idempotencyKey);
 
     void ensureSession(customerId)
       .then(async (sessionId) => {
@@ -109,6 +134,7 @@ export function HomeScreen() {
             rank,
           },
         });
+        productViewKeysRef.current.delete(attemptKey);
         const upsell = engagement.upsell_result;
         if (
           upsell?.status === "OFFER_AVAILABLE" &&
@@ -144,17 +170,21 @@ export function HomeScreen() {
   }
 
   async function handleUpsellRespond(action: UpsellUserAction): Promise<boolean> {
-    if (!homeUpsell?.result.decision_id) return false;
+    if (!displayedUpsell?.result.decision_id) return false;
 
     setIsRecordingUpsellAction(true);
     try {
       const response = await recordUpsellDecisionEvent(
-        homeUpsell.result.decision_id,
-        homeUpsell.sessionId,
+        displayedUpsell.result.decision_id,
+        displayedUpsell.sessionId,
         upsellEventType[action],
       );
       if (response.recorded) {
         showToast(response.message);
+        setHomeUpsell(null);
+        await queryClient.invalidateQueries({
+          queryKey: ["upsell", "pending", customerId],
+        });
       }
       return response.recorded;
     } catch {
@@ -306,12 +336,12 @@ export function HomeScreen() {
           ))}
         </section>
 
-        {homeUpsell && (
+        {displayedUpsell && (
           <section aria-label="Optional Neu.Tail service">
             <UpsellCard
-              upsell={homeUpsell.result}
-              sessionId={homeUpsell.sessionId}
-              traceId={homeUpsell.traceId}
+              upsell={displayedUpsell.result}
+              sessionId={displayedUpsell.sessionId}
+              traceId={displayedUpsell.traceId}
               disabled={isRecordingUpsellAction}
               onRespond={handleUpsellRespond}
             />

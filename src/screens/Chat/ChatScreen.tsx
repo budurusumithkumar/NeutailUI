@@ -137,6 +137,7 @@ export function ChatScreen() {
   const [isRecordingUpsellAction, setIsRecordingUpsellAction] = useState(false);
   const [detailProduct, setDetailProduct] = useState<ProductCardType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const productViewKeysRef = useRef(new Map<string, string>());
   const sessionMatchesCustomer = sessionOwnerId === customerId;
   const activeSessionId = sessionMatchesCustomer ? sessionId : null;
   const activeTranscript = sessionMatchesCustomer ? transcript : EMPTY_TRANSCRIPT;
@@ -227,8 +228,15 @@ export function ChatScreen() {
     setDetailProduct(product);
     if (!activeSessionId) return;
 
-    void recordProductView(activeSessionId, product.sku)
+    const attemptKey = `${activeSessionId}:${product.sku}`;
+    const idempotencyKey =
+      productViewKeysRef.current.get(attemptKey) ??
+      `chat-product-view-${crypto.randomUUID()}`;
+    productViewKeysRef.current.set(attemptKey, idempotencyKey);
+
+    void recordProductView(activeSessionId, product.sku, { idempotencyKey })
       .then((engagement) => {
+        productViewKeysRef.current.delete(attemptKey);
         const entry = engagementUpsellEntry(engagement, activeSessionId);
         if (!entry || entry.kind !== "assistant") return;
 

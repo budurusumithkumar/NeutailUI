@@ -7,6 +7,11 @@ The authenticated Home screen now loads in-stock product sections from
 and preferences. Product cards support detail views, local cart actions,
 engagement-triggered governed Upsell, and a Fit handoff into Chat.
 
+Product-view requests reuse a caller-owned idempotency key while retrying.
+Actionable offers are restored from `GET /api/v1/upsell/decisions/pending`, so
+the Upsell card survives a page refresh or API restart. Out-of-stock products
+are rejected by the backend before their view count can trigger an offer.
+
 The Cart now supports a local demo checkout through
 `POST /api/v1/demo/checkout`. A successful purchase displays the committed
 profiling/loyalty transition and refreshes Home recommendations plus the

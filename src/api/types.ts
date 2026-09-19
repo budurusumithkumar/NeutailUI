@@ -198,6 +198,14 @@ export interface UpsellDecisionEventResponse {
   message: string;
 }
 
+export interface PendingUpsellDecision {
+  decision_id: string;
+  session_id: string;
+  trace_id?: string | null;
+  created_at: string;
+  upsell_result: UpsellResult;
+}
+
 export type AgentStatus = "STARTED" | "COMPLETED" | "FAILED" | "SKIPPED";
 
 export interface AgentActivity {

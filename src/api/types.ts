@@ -71,6 +71,31 @@ export interface ProductCard {
   reason_codes: string[];
   available: boolean;
   available_sizes?: string[];
+  category?: string | null;
+  color?: string | null;
+  style?: string | null;
+}
+
+export type HomeRecommendationStrategy =
+  | "CATEGORY_AFFINITY"
+  | "PROFILE_PREFERENCE"
+  | "PROFILE_PERSONALIZATION";
+
+export interface HomeRecommendationSection {
+  section_id: string;
+  title: string;
+  category?: string | null;
+  products: ProductCard[];
+}
+
+export interface HomeRecommendationsResponse {
+  recommendation_id: string;
+  trace_id: string;
+  generated_at: string;
+  status: "SUCCESS" | "NO_RESULTS";
+  strategy: HomeRecommendationStrategy;
+  categories_used: string[];
+  sections: HomeRecommendationSection[];
 }
 
 export type RiskBand = "LOW" | "MEDIUM" | "HIGH";

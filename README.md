@@ -1,6 +1,11 @@
 # Neu.Tail Frontend
 
-ReactJS web frontend for Neu.Tail, an AI shopping-assistant experience. This repo is frontend-only — the FastAPI backend is owned by a separate team; the contract between them lives at [`NeuTail_Mission4_UI_Backend_OpenAPI.json`](NeuTail_Mission4_UI_Backend_OpenAPI.json).
+ReactJS web frontend for Neu.Tail, an AI shopping-assistant experience. This repo is frontend-only — the FastAPI backend is owned by a separate team; the base contract lives at [`NeuTail_Mission4_UI_Backend_OpenAPI.json`](NeuTail_Mission4_UI_Backend_OpenAPI.json), with additive contracts for [Upsell](NeuTail_Upsell_UI_Backend_OpenAPI.json) and [Home recommendations](NeuTail_Home_Recommendations_OpenAPI.json).
+
+The authenticated Home screen now loads in-stock product sections from
+`GET /api/v1/recommendations/home`, using the customer's category affinities
+and preferences. Product cards support detail views, local cart actions,
+engagement-triggered governed Upsell, and a Fit handoff into Chat.
 
 **Start with [docs/README.md](docs/README.md)** — the SDD (spec-driven development) artifacts written before this code, covering scope, screens, user flows, the API integration map (including contract gaps like cart), the chat-response rendering contract, and architecture. Read those before making structural changes here.
 

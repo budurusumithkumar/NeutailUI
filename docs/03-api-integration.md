@@ -1,12 +1,13 @@
 # API Integration Map
 
-Sources of truth: [`NeuTail_Mission4_UI_Backend_OpenAPI.json`](../NeuTail_Mission4_UI_Backend_OpenAPI.json) and the additive [`NeuTail_Upsell_UI_Backend_OpenAPI.json`](../NeuTail_Upsell_UI_Backend_OpenAPI.json). This file maps every screen/action to a concrete operation and calls out where the contracts have gaps the frontend must design around.
+Sources of truth: [`NeuTail_Mission4_UI_Backend_OpenAPI.json`](../NeuTail_Mission4_UI_Backend_OpenAPI.json), the additive [`NeuTail_Upsell_UI_Backend_OpenAPI.json`](../NeuTail_Upsell_UI_Backend_OpenAPI.json), and the additive [`NeuTail_Home_Recommendations_OpenAPI.json`](../NeuTail_Home_Recommendations_OpenAPI.json). This file maps every screen/action to a concrete operation and calls out where the contracts have gaps the frontend must design around.
 
 | Screen / Action | Operation | Notes |
 |---|---|---|
 | Login submit | `login` (`POST /api/v1/auth/login`) | Store `access_token`, `expires_in`, `user`. |
 | App boot / token restore | `getCurrentUser` (`GET /api/v1/auth/me`) | Validates a stored token; 401 → force re-login. |
 | Logout | `logout` (`POST /api/v1/auth/logout`) | Fire-and-forget; always clear local state after. |
+| Home recommendations | `getHomeRecommendations` (`GET /api/v1/recommendations/home`) | Returns authenticated, in-stock sections ranked from customer category affinity and profile preferences. |
 | Open Chat (first time) | `createSession` (`POST /api/v1/sessions`) | `channel: "web"`. Store returned `session_id` in `sessionStorage`. |
 | Chat reload / resume | `getSessionContext` (`GET /api/v1/sessions/{id}/context`) | Rehydrates intent/selected_sku/etc., **not** message history (Gap #2). |
 | Close/leave chat (optional) | `closeSession` (`DELETE /api/v1/sessions/{id}`) | Optional — call on explicit "end conversation", not on every navigation away. |
@@ -31,8 +32,14 @@ There is no `Cart`, `CartItem`, or any `/cart` path in the OpenAPI file. The use
 ### Gap #3 — No "list my sessions" endpoint
 Only single-session `GET`/`DELETE`/`POST` exist. A "past conversations" screen isn't buildable against the current contract; deferred (see [01-screens.md](01-screens.md) out-of-scope list).
 
-### Gap #4 — No product catalog/search endpoint
-Products only ever arrive embedded in a `ChatResponse`. There's no way to browse without chatting first. This is presumably intentional (agent-first UX) but is called out in case a "browse all products" screen was expected. The Wardrobe/Try-On screen (`src/screens/TryOn/`) sidesteps this entirely with a small hardcoded catalog and generated SVG/canvas artwork — it's a standalone styling toy, not a substitute for real catalog browsing, and adds no new API surface. Its camera preview does real body-part segmentation to recolor the customer's existing clothing, but entirely client-side via TensorFlow.js BodyPix (`bodySegmentation.ts`) — no backend, no uploaded video/segmentation data. The model weights are fetched at runtime from Google's public model hosting (the library's own documented default), lazy-loaded only when this screen's camera is enabled, so it doesn't affect the main app bundle.
+### Gap #4 — No general product catalog/search endpoint
+The Home screen can now browse a personalized subset through
+`GET /api/v1/recommendations/home`; products also continue to arrive in
+`ChatResponse`. There is still no general catalogue/browse endpoint for an
+arbitrary category page. The Wardrobe/Try-On screen (`src/screens/TryOn/`)
+remains a standalone client-side styling toy rather than a real catalogue
+surface. Its camera preview uses TensorFlow.js BodyPix locally and does not
+upload video or segmentation data.
 
 ## Auth/session lifecycle contract
 - Bearer token attached via an Axios/fetch interceptor to every call except `login` and `health`.

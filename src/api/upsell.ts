@@ -15,16 +15,26 @@ type WireEngagementEventResponse = Omit<
   upsell_result: unknown;
 };
 
+interface ProductViewOptions {
+  idempotencyKey?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export async function recordProductView(
   sessionId: string,
   sku: string,
+  options: ProductViewOptions = {},
 ): Promise<EngagementEventResponse> {
   const payload: EngagementEventInput = {
     session_id: sessionId,
     event_type: "PRODUCT_VIEWED",
     sku,
-    idempotency_key: `product-view-${crypto.randomUUID()}`,
-    metadata: { source: "PRODUCT_DETAIL" },
+    idempotency_key:
+      options.idempotencyKey ?? `product-view-${crypto.randomUUID()}`,
+    metadata: {
+      source: "PRODUCT_DETAIL",
+      ...options.metadata,
+    },
   };
 
   const { data } = await apiClient.post<WireEngagementEventResponse>(

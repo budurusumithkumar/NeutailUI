@@ -90,6 +90,9 @@ function normalizeProduct(value: unknown): ProductCard | null {
     reason_codes: reasonCodes,
     available,
     available_sizes: availableSizes,
+    category: asNullableString(product.category),
+    color: asNullableString(product.color),
+    style: asNullableString(product.style),
   };
 }
 

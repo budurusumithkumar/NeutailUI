@@ -18,6 +18,7 @@ src/
     sessions.ts         # createSession, getSession, getSessionContext, closeSession
     chat.ts             # postChat
     customer.ts         # getCustomerSummary
+    recommendations.ts  # getHomeRecommendations
     types.ts            # mirrors OpenAPI components/schemas — see 06-data-models.md
   cart/
     CartRepository.ts   # interface: getItems, addItem, updateQty, removeItem, clear

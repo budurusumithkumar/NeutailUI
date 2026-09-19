@@ -17,12 +17,26 @@ export function ProductCard({ product, onAddToCart, onAskFit, onOpenDetail }: Pr
         className="block w-full text-left"
       >
         <div className="aspect-[3/4] w-full overflow-hidden rounded-lg bg-neutral-100">
-          {product.image_url && (
+          {product.image_url ? (
             <img
               src={product.image_url}
               alt={product.name}
               className="h-full w-full object-cover"
             />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center bg-gradient-to-br from-stone-100 to-neutral-200 px-4 text-center">
+              <span className="text-xs font-medium uppercase tracking-widest text-neutral-400">
+                Neu.Tail
+              </span>
+              <span className="mt-2 text-sm font-semibold text-neutral-700">
+                {product.category ?? "Curated style"}
+              </span>
+              {(product.color || product.style) && (
+                <span className="mt-1 text-xs text-neutral-500">
+                  {[product.color, product.style].filter(Boolean).join(" · ")}
+                </span>
+              )}
+            </div>
           )}
         </div>
         <p className="mt-2 text-sm font-medium leading-tight">{product.name}</p>

@@ -1,5 +1,6 @@
 import { isAxiosError } from "axios";
 import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { postChat } from "../../api/chat";
 import { ensureSession } from "../../api/ensureSession";
 import {
@@ -109,13 +110,24 @@ function engagementUpsellEntry(
 }
 
 export function ChatScreen() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { showToast } = useToast();
   const addToCart = useCartStore((state) => state.addItem);
+  const navigationState = location.state as
+    | { selectedSku?: unknown; draft?: unknown }
+    | null;
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
-  const [input, setInput] = useState("");
-  const [pendingSku, setPendingSku] = useState<string | null>(null);
+  const [input, setInput] = useState(() =>
+    typeof navigationState?.draft === "string" ? navigationState.draft : "",
+  );
+  const [pendingSku, setPendingSku] = useState<string | null>(() =>
+    typeof navigationState?.selectedSku === "string"
+      ? navigationState.selectedSku
+      : null,
+  );
   const [isSending, setIsSending] = useState(false);
   const [isRecordingUpsellAction, setIsRecordingUpsellAction] = useState(false);
   const [detailProduct, setDetailProduct] = useState<ProductCardType | null>(null);
@@ -141,6 +153,11 @@ export function ChatScreen() {
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
+
+  useEffect(() => {
+    if (!navigationState) return;
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, navigate, navigationState]);
 
   async function sendMessage(text: string, selectedSku: string | null): Promise<boolean> {
     if (!sessionId || !text.trim()) return false;

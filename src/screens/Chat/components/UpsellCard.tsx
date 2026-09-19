@@ -28,7 +28,7 @@ function decisionStorageKey(
 ): string {
   const fallbackKey = traceId || "service-offer";
   const offerKey =
-    upsell.offer?.offer_type ?? upsell.decision_id ?? fallbackKey;
+    upsell.decision_id ?? upsell.offer?.offer_type ?? fallbackKey;
   return `neutail_upsell_decision_${sessionId}_${offerKey}`;
 }
 

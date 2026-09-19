@@ -6,7 +6,15 @@
    - 200 → persist `access_token` (memory + secure storage; see [05-architecture.md](05-architecture.md) for token storage decision) and `user`; navigate to **Home**.
    - 401 → inline error, stay on Login.
 3. Home mounts → `GET /api/v1/customers/me/summary` populates the personalized panel.
-4. If no active session exists for this browser session, Home lazily calls `POST /api/v1/sessions` (`channel: "web"`) the first time the user opens Chat, not on Home load (avoid creating sessions the user never uses).
+4. Home calls `GET /api/v1/recommendations/home` and renders in-stock sections
+   selected from the customer's category affinities and profile preferences.
+5. Opening a recommended product lazily creates a session if necessary and
+   records `PRODUCT_VIEWED` with `source: "HOME_RECOMMENDATIONS"`; rendering a
+   card alone is not counted as a view.
+6. **Add to cart** uses the existing local cart. **Will it fit?** opens Chat
+   with the selected SKU and a prepared Fit question.
+7. If no active session exists, Home still creates one only on the first Chat
+   or product interaction, not merely when recommendations render.
 
 ## Flow B — Product discovery in Chat
 1. User opens **Chat** from Home (session created if not already active).

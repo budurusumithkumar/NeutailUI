@@ -22,6 +22,13 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
+export interface DemoResetResponse {
+  reset: true;
+  customer_ids: string[];
+  deleted_records: Record<string, number>;
+  message: string;
+}
+
 export type SessionStatus = "ACTIVE" | "CLOSED";
 
 export interface SessionResponse {
@@ -108,6 +115,62 @@ export interface FitResult {
   risk_band?: RiskBand;
   reason_codes?: string[];
   explanation?: string | null;
+}
+
+export type FitInterventionStatus =
+  | "ACTION_REQUIRED"
+  | "EXCHANGE_CREATED"
+  | "DECLINED"
+  | "DISMISSED"
+  | "EXPIRED";
+
+export type FitInterventionEventType =
+  | "EXCHANGE_ACCEPTED"
+  | "DECLINED"
+  | "DISMISSED";
+
+export interface FitIntervention {
+  intervention_id: string;
+  customer_id: string;
+  order_id: string;
+  order_item_id: string;
+  sku: string;
+  product_name: string;
+  category?: string | null;
+  delivered_size: string;
+  recommended_size: string;
+  available_sizes: string[];
+  risk_level: RiskBand;
+  confidence: number;
+  reason_codes: string[];
+  evidence: Record<string, unknown>;
+  message: string;
+  status: FitInterventionStatus;
+  inventory_mode: "SIZE_LEVEL" | "SIMULATED_AGGREGATE";
+  simulated_exchange: true;
+  trace_id: string;
+  version: number;
+  expires_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FitInterventionEventInput {
+  event_type: FitInterventionEventType;
+  idempotency_key: string;
+  selected_size?: string | null;
+}
+
+export interface FitInterventionEventResponse {
+  recorded: boolean;
+  replayed: boolean;
+  intervention: FitIntervention;
+  exchange_id?: string | null;
+  exchange_status?: string | null;
+  simulated?: boolean | null;
+  correction_id?: string | null;
+  outbox_id?: string | null;
+  message: string;
 }
 
 export type UpsellStatus = "OFFER_AVAILABLE" | "NO_OFFER" | "FAILED";

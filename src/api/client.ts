@@ -21,8 +21,10 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    const isLoginCall = error.config?.url?.includes("/api/v1/auth/login");
-    if (error.response?.status === 401 && !isLoginCall) {
+    const isCredentialCall =
+      error.config?.url?.includes("/api/v1/auth/login") ||
+      error.config?.url?.includes("/api/v1/demo/reset");
+    if (error.response?.status === 401 && !isCredentialCall) {
       const auth = useAuthStore.getState();
       if (auth.user?.customer_id) {
         clearStoredSession(auth.user.customer_id);

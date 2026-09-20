@@ -3,6 +3,7 @@ import { isAxiosError } from "axios";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../../api/auth";
+import { resetDemoData } from "../../api/demo";
 import { clearStoredSession } from "../../api/sessionState";
 import type { ErrorResponse } from "../../api/types";
 import { useAuthStore } from "../../auth/authStore";
@@ -16,6 +17,14 @@ function describeLoginError(error: unknown): string | null {
   return "Couldn't reach Neu.Tail. Please try again.";
 }
 
+function describeResetError(error: unknown): string | null {
+  if (!error) return null;
+  if (isAxiosError<{ detail?: string }>(error) && error.response) {
+    return error.response.data?.detail ?? "Demo data could not be reset.";
+  }
+  return "Couldn't reach Neu.Tail. Please try again.";
+}
+
 export function LoginScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -25,6 +34,7 @@ export function LoginScreen() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   const loginMutation = useMutation({
     mutationFn: login,
@@ -37,10 +47,24 @@ export function LoginScreen() {
     },
   });
 
+  const resetMutation = useMutation({
+    mutationFn: () => resetDemoData(password || "demo"),
+    onMutate: () => setResetMessage(null),
+    onSuccess: (data) => {
+      queryClient.clear();
+      setResetMessage(data.message);
+    },
+  });
+
   const errorMessage = describeLoginError(loginMutation.error);
 
-  function selectDemoCustomer(customer: "alice" | "bob") {
-    setEmail(`${customer}.demo@demo.neutail.local`);
+  function selectDemoCustomer(customer: "alice" | "bob" | "grace") {
+    const demoEmails = {
+      alice: "alice.demo@demo.neutail.local",
+      bob: "bob.demo@demo.neutail.local",
+      grace: "grace.morris5@demo.neutail.local",
+    };
+    setEmail(demoEmails[customer]);
     setPassword("demo");
   }
 
@@ -63,14 +87,17 @@ export function LoginScreen() {
             Segmentation demo
           </p>
           <p className="mt-1 text-xs text-neutral-500">
-            Both customers begin with two qualifying purchases. Checkout once to see their segment change.
+            Use Alice or Bob for segmentation. Use Grace for the post-delivery Fit exchange flow.
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <Button type="button" variant="secondary" onClick={() => selectDemoCustomer("alice")}>
               Alice · Affluent
             </Button>
             <Button type="button" variant="secondary" onClick={() => selectDemoCustomer("bob")}>
               Bob · Non-affluent
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => selectDemoCustomer("grace")}>
+              Grace · Size &amp; Fit
             </Button>
           </div>
         </div>
@@ -108,6 +135,25 @@ export function LoginScreen() {
         <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
           {loginMutation.isPending ? "Signing in…" : "Sign in"}
         </Button>
+
+        <div className="border-t border-neutral-100 pt-2 text-center">
+          <button
+            type="button"
+            className="text-xs text-neutral-400 underline-offset-2 transition hover:text-neutral-600 hover:underline disabled:cursor-wait disabled:opacity-60"
+            disabled={resetMutation.isPending}
+            onClick={() => resetMutation.mutate()}
+          >
+            {resetMutation.isPending ? "Resetting demo…" : "Reset demo data"}
+          </button>
+          {(resetMessage || resetMutation.error) && (
+            <p
+              className={`mt-1 text-xs ${resetMutation.error ? "text-rose-500" : "text-neutral-400"}`}
+              role="status"
+            >
+              {resetMessage ?? describeResetError(resetMutation.error)}
+            </p>
+          )}
+        </div>
       </form>
     </div>
   );

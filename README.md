@@ -12,11 +12,19 @@ Actionable offers are restored from `GET /api/v1/upsell/decisions/pending`, so
 the Upsell card survives a page refresh or API restart. Out-of-stock products
 are rejected by the backend before their view count can trigger an offer.
 
+Home also polls `GET /api/v1/fit/interventions?status=ACTION_REQUIRED` for
+durable post-delivery Fit actions. The dedicated card shows delivered and
+recommended sizes, requires explicit size confirmation, and labels the PoC
+exchange as simulated. Accept, decline, and dismiss mutations are idempotent;
+successful exchange confirmation refreshes pending actions and customer facts.
+
 The Cart now supports a local demo checkout through
 `POST /api/v1/demo/checkout`. A successful purchase displays the committed
 profiling/loyalty transition and refreshes Home recommendations plus the
-customer summary. The login screen includes Alice (Affluent) and Bob
-(non-affluent) selectors for the third-purchase segmentation demo.
+customer summary. The login screen includes Alice (Affluent), Bob
+(non-affluent), and Grace (Size & Fit) selectors. A deliberately low-emphasis
+**Reset demo data** action at the bottom of the login card restores all three
+demo journeys through the backend's credential-gated reset endpoint.
 
 **Start with [docs/README.md](docs/README.md)** — the SDD (spec-driven development) artifacts written before this code, covering scope, screens, user flows, the API integration map (including contract gaps like cart), the chat-response rendering contract, and architecture. Read those before making structural changes here.
 

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { ensureSession } from "../../api/ensureSession";
 import { getCustomerSummary } from "../../api/customer";
 import { getHomeRecommendations } from "../../api/recommendations";
+import { getPendingFitInterventions, recordFitInterventionEvent } from "../../api/fit";
 import {
   getPendingUpsellDecisions,
   recordProductView,
@@ -11,6 +12,7 @@ import {
 } from "../../api/upsell";
 import type {
   ProductCard as ProductCardType,
+  FitInterventionEventType,
   UpsellDecisionEventType,
   UpsellResult,
 } from "../../api/types";
@@ -22,6 +24,7 @@ import { useToast } from "../../components/toastContext";
 import { useCartCount, useCartStore, useCartSubtotal } from "../../cart/cartStore";
 import { ProductCard } from "../Chat/components/ProductCard";
 import { ProductDetailModal } from "../Chat/components/ProductDetailModal";
+import { FitInterventionCard } from "./FitInterventionCard";
 import {
   UpsellCard,
   type UpsellUserAction,
@@ -49,6 +52,7 @@ export function HomeScreen() {
   const [detailProduct, setDetailProduct] = useState<ProductCardType | null>(null);
   const [homeUpsell, setHomeUpsell] = useState<HomeUpsell | null>(null);
   const [isRecordingUpsellAction, setIsRecordingUpsellAction] = useState(false);
+  const [isRecordingFitAction, setIsRecordingFitAction] = useState(false);
   const productViewKeysRef = useRef(new Map<string, string>());
   const customerId = user?.customer_id;
 
@@ -68,6 +72,13 @@ export function HomeScreen() {
     queryFn: getPendingUpsellDecisions,
     enabled: Boolean(customerId),
     refetchInterval: 10_000,
+  });
+  const pendingFitQuery = useQuery({
+    queryKey: ["fit", "interventions", "pending", customerId],
+    queryFn: getPendingFitInterventions,
+    enabled: Boolean(customerId),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   });
 
   const pendingUpsell = pendingUpsellQuery.data?.[0];
@@ -195,6 +206,39 @@ export function HomeScreen() {
     }
   }
 
+  async function handleFitRespond(
+    eventType: FitInterventionEventType,
+    selectedSize?: string,
+  ): Promise<boolean> {
+    const intervention = pendingFitQuery.data?.[0];
+    if (!intervention) return false;
+    setIsRecordingFitAction(true);
+    try {
+      const response = await recordFitInterventionEvent(
+        intervention.intervention_id,
+        eventType,
+        {
+          selectedSize,
+          idempotencyKey: `${intervention.intervention_id}-${eventType}-${selectedSize ?? "none"}`,
+        },
+      );
+      showToast(response.message);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["fit", "interventions", "pending", customerId],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["customer", "summary", customerId] }),
+      ]);
+      return response.recorded;
+    } catch {
+      await pendingFitQuery.refetch();
+      showToast("The fit action could not be recorded. Availability may have changed.", "error");
+      return false;
+    } finally {
+      setIsRecordingFitAction(false);
+    }
+  }
+
   const summary = summaryQuery.data;
   const recommendations = recommendationsQuery.data;
 
@@ -262,6 +306,21 @@ export function HomeScreen() {
               </div>
             )}
           </div>
+        )}
+
+        {pendingFitQuery.data?.[0] && (
+          <section aria-labelledby="fit-action-title">
+            <h2 id="fit-action-title" className="mb-2 text-lg font-semibold">
+              Recommended action
+            </h2>
+            <FitInterventionCard
+              intervention={pendingFitQuery.data[0]}
+              disabled={isRecordingFitAction}
+              onAccept={(size) => handleFitRespond("EXCHANGE_ACCEPTED", size)}
+              onDecline={() => handleFitRespond("DECLINED")}
+              onDismiss={() => handleFitRespond("DISMISSED")}
+            />
+          </section>
         )}
 
         <section aria-labelledby="home-recommendations-title">

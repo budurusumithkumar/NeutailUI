@@ -7,5 +7,7 @@ export interface CartItem {
   price_gbp: number;
   image_url?: string | null;
   size?: string | null;
+  /** Sizes the product is offered in, when known — drives the size-change picker in the cart. */
+  available_sizes?: string[];
   quantity: number;
 }

@@ -177,6 +177,7 @@ export function ChatScreen() {
       brand: product.brand,
       price_gbp: product.price_gbp,
       image_url: product.image_url,
+      available_sizes: product.available_sizes,
     });
     showToast(`Added ${product.name} to cart`);
   }

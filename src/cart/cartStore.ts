@@ -6,6 +6,7 @@ interface CartState {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
   updateQuantity: (sku: string, size: string | null, quantity: number) => void;
+  changeSize: (sku: string, size: string | null, newSize: string) => void;
   removeItem: (sku: string, size: string | null) => void;
   clear: () => void;
 }
@@ -18,6 +19,9 @@ export const useCartStore = create<CartState>((set) => ({
 
   updateQuantity: (sku, size, quantity) =>
     set({ items: localCartRepository.updateQuantity(sku, size, quantity) }),
+
+  changeSize: (sku, size, newSize) =>
+    set({ items: localCartRepository.changeSize(sku, size, newSize) }),
 
   removeItem: (sku, size) => set({ items: localCartRepository.removeItem(sku, size) }),
 

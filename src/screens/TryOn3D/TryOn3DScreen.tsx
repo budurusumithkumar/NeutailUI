@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three/webgpu";
-import { extractTorso, loadPoseLandmarker } from "./poseTracking3D";
+import { loadPoseLandmarker } from "../../lib/poseLandmarker";
+import { extractTorso } from "./poseTracking3D";
 import { createShirtGeometry, updateShirtGeometry } from "./shirtMesh";
 
 type Status = "idle" | "requesting" | "loadingModel" | "active" | "unsupported" | "denied" | "error";

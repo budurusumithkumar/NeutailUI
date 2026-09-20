@@ -54,6 +54,19 @@ export const localCartRepository: CartRepository = {
     return write(items);
   },
 
+  changeSize(sku, size, newSize) {
+    const items = read();
+    const line = items.find((entry) => sameLine(entry, sku, size));
+    if (!line || newSize === size) return items;
+    const target = items.find((entry) => sameLine(entry, sku, newSize));
+    if (target) {
+      target.quantity += line.quantity;
+      return write(items.filter((entry) => entry !== line));
+    }
+    line.size = newSize;
+    return write(items);
+  },
+
   removeItem(sku, size) {
     const items = read().filter((line) => !sameLine(line, sku, size));
     return write(items);

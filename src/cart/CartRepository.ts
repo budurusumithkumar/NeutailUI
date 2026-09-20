@@ -6,6 +6,8 @@ export interface CartRepository {
   getItems(): CartItem[];
   addItem(item: Omit<CartItem, "quantity">, quantity?: number): CartItem[];
   updateQuantity(sku: string, size: string | null, quantity: number): CartItem[];
+  /** Moves a line to a new size, merging quantities if that sku+size line already exists. */
+  changeSize(sku: string, size: string | null, newSize: string): CartItem[];
   removeItem(sku: string, size: string | null): CartItem[];
   clear(): CartItem[];
 }

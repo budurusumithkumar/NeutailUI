@@ -1,8 +1,4 @@
-import { FilesetResolver, PoseLandmarker, type NormalizedLandmark } from "@mediapipe/tasks-vision";
-
-const WASM_BASE_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
+import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 
 const MIN_VISIBILITY = 0.5;
 
@@ -22,29 +18,6 @@ export interface Torso {
   /** Elbow positions, when confidently visible, used to widen the mesh for a raised/bent arm. */
   leftElbow: NormalizedLandmark | null;
   rightElbow: NormalizedLandmark | null;
-}
-
-let landmarkerPromise: Promise<PoseLandmarker> | null = null;
-
-/**
- * Lazy singleton, mirroring the existing loadBodySegmenter() pattern in
- * ../TryOn/bodySegmentation.ts — the model is large enough that it should
- * only ever be loaded once per session, on first use.
- */
-export function loadPoseLandmarker(): Promise<PoseLandmarker> {
-  if (!landmarkerPromise) {
-    landmarkerPromise = FilesetResolver.forVisionTasks(WASM_BASE_URL).then((filesetResolver) =>
-      PoseLandmarker.createFromOptions(filesetResolver, {
-        baseOptions: {
-          modelAssetPath: MODEL_URL,
-          delegate: "GPU",
-        },
-        runningMode: "VIDEO",
-        numPoses: 1,
-      }),
-    );
-  }
-  return landmarkerPromise;
 }
 
 function visible(landmark: NormalizedLandmark | undefined): landmark is NormalizedLandmark {

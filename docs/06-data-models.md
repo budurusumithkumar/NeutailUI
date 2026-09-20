@@ -203,6 +203,7 @@ export interface CartItem {
   price_gbp: number;
   image_url?: string | null;
   size?: string | null;      // chosen at add-to-cart time, if available_sizes was shown
+  available_sizes?: string[]; // copied from ProductCard so the cart can offer a size picker
   quantity: number;
 }
 
@@ -210,6 +211,7 @@ export interface CartRepository {
   getItems(): CartItem[];
   addItem(item: Omit<CartItem, "quantity">, quantity?: number): void;
   updateQuantity(sku: string, size: string | null, quantity: number): void;
+  changeSize(sku: string, size: string | null, newSize: string): void; // merges into an existing sku+size line
   removeItem(sku: string, size: string | null): void;
   clear(): void;
 }

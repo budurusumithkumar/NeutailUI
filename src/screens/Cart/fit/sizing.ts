@@ -31,6 +31,17 @@ function locate(chestCm: number, bounds: readonly number[], margin: number) {
   return { index, alternate };
 }
 
+/** The raw numbers behind a scan, kept so a reading can be compared with tape measurements (calibration mode). */
+export interface ScanRaw {
+  outlineShoulderCm: number;
+  torsoCm: number;
+  jointCm: number | null;
+  distanceCm: number | null;
+  facePx: number | null;
+  irisPx: number | null;
+  reachCm: number;
+}
+
 export interface BodyMeasurement {
   size: LetterSize;
   /** Neighbouring size when the chest estimate is within the borderline margin of a boundary. */
@@ -46,6 +57,7 @@ export interface BodyMeasurement {
   partialChest: boolean;
   /** How much the final readings varied (IQR / median); higher means the person moved or the camera was noisy. */
   spread: number;
+  raw?: ScanRaw;
 }
 
 export function median(values: number[]): number {
@@ -102,6 +114,7 @@ export function measurementFromScan(
   torsoWidthCm: number,
   spread = 0,
   partialChest = false,
+  raw?: ScanRaw,
 ): BodyMeasurement {
   const shoulderWidthCm = outlineShoulderWidthCm - SHOULDER_CLOTHING_ALLOWANCE_CM;
   const torsoDepthCm = estimateTorsoDepthCm(torsoWidthCm);
@@ -118,6 +131,7 @@ export function measurementFromScan(
     torsoDepthCm,
     partialChest,
     spread,
+    raw,
   };
 }
 
@@ -141,7 +155,9 @@ export function normalizeSize(size: string | null | undefined): LetterSize | nul
   return SIZE_ALIASES[upper] ?? null;
 }
 
-export type FitVerdict = "good" | "snug" | "roomy" | "too_small" | "too_large" | "unknown";
+// Softer than a strict size-for-size match: the camera estimate is only good to about a size, so only sizes
+// two or more steps away are flagged; one step either way is just noted as close.
+export type FitVerdict = "good" | "close" | "too_small" | "too_large" | "unknown";
 
 export interface FitAssessment {
   verdict: FitVerdict;
@@ -238,8 +254,9 @@ export function assessFit(
   const suggestedSize = target && scale.parse(target) !== itemIndex ? target : null;
   const diff = itemIndex - bodyIndex;
 
-  if (diff === -1) return { verdict: "snug", label: "May feel snug", atRisk: true, suggestedSize };
-  if (diff <= -2) return { verdict: "too_small", label: "Likely too small", atRisk: true, suggestedSize };
-  if (diff === 1) return { verdict: "roomy", label: "Roomy fit", atRisk: false, suggestedSize };
+  if (Math.abs(diff) === 1) {
+    return { verdict: "close", label: "Close to your estimated size", atRisk: false, suggestedSize: null };
+  }
+  if (diff < 0) return { verdict: "too_small", label: "Likely too small", atRisk: true, suggestedSize };
   return { verdict: "too_large", label: "Likely too large", atRisk: true, suggestedSize };
 }

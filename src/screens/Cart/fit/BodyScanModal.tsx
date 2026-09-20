@@ -4,6 +4,8 @@ import { Button } from "../../../components/Button";
 import { loadFaceLandmarker } from "../../../lib/faceLandmarker";
 import { loadPoseLandmarker } from "../../../lib/poseLandmarker";
 import { shoulderSample, torsoSample, type OverlayRun } from "./bodyGeometry";
+import { CalibrationPanel } from "./CalibrationPanel";
+import { isCalibrationMode } from "./calibration";
 import { useBodyProfileStore } from "./bodyProfileStore";
 import {
   MAX_DISTANCE_CM,
@@ -66,6 +68,9 @@ interface Tick {
   /** Current camera-to-face distance, and — when the chest is out of frame — the distance that would show it. */
   distanceCm: number | null;
   targetCm: number | null;
+  facePx: number | null;
+  irisPx: number | null;
+  jointCm: number | null;
   diagnostics: string;
   runs: OverlayRun[];
   frame: { width: number; height: number };
@@ -108,6 +113,7 @@ function makeSnapshot(video: HTMLVideoElement, tick: Tick, note: string): string
 
 export function BodyScanModal({ onClose }: { onClose: () => void }) {
   const setMeasurement = useBodyProfileStore((state) => state.setMeasurement);
+  const [calibrating] = useState(isCalibrationMode);
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
 
@@ -179,6 +185,9 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
         hint: null,
         distanceCm: null,
         targetCm: null,
+        facePx: null,
+        irisPx: null,
+        jointCm: null,
         diagnostics: "",
         runs: [],
         frame: videoSize,
@@ -198,6 +207,8 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
       const faceScale = median(scales);
       const distance = distanceCm(faceScale, videoSize);
       base.distanceCm = distance;
+      base.facePx = metrics.facePx;
+      base.irisPx = metrics.irisPx;
       base.diagnostics = `distance ≈ ${(distance / 100).toFixed(1)} m · face ${Math.round(metrics.facePx)} px · iris ${
         metrics.irisPx === null ? "n/a" : `${metrics.irisPx.toFixed(1)} px`
       }`;
@@ -233,6 +244,7 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
           ...base,
           frame,
           shoulder: shoulders.shoulderWidthCm,
+          jointCm: shoulders.jointDistanceCm,
           runs: shoulders.runs,
           checks: { ...base.checks, shoulders: "ok" },
         };
@@ -297,6 +309,15 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
           torso,
           spread,
           lastReachCm < PARTIAL_CHEST_BELOW_CM,
+          {
+            outlineShoulderCm: median(shoulderSamples),
+            torsoCm: torso,
+            jointCm: lastGood?.jointCm ?? null,
+            distanceCm: lastGood?.distanceCm ?? null,
+            facePx: lastGood?.facePx ?? null,
+            irisPx: lastGood?.irisPx ?? null,
+            reachCm: lastReachCm,
+          },
         );
         const shown = lastWithTorso ?? lastGood;
         setSnapshot(
@@ -420,7 +441,12 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
       >
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Measure my size</h2>
+            <h2 className="text-lg font-semibold">
+              Measure my size
+              <span className="ml-2 rounded-full bg-neutral-900 px-2 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide text-white">
+                Beta
+              </span>
+            </h2>
             <p className="text-xs text-neutral-500">Runs on your device — no images are uploaded or stored.</p>
           </div>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700" aria-label="Close">
@@ -535,6 +561,7 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
               This is an estimate from a single camera view, not a tape measurement — it can be off by a size or
               so. Loose clothing or slouching will inflate it; check the size guide if you're unsure.
             </p>
+            {calibrating && <CalibrationPanel measurement={result} />}
             <div className="mt-4 flex gap-2">
               <Button className="flex-1" onClick={onClose}>
                 Check my cart

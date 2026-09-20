@@ -9,8 +9,7 @@ import { assessFit, defaultSizesFor, type FitVerdict } from "./fit/sizing";
 
 const verdictStyles: Record<FitVerdict, string> = {
   good: "bg-emerald-50 text-emerald-700",
-  roomy: "bg-sky-50 text-sky-700",
-  snug: "bg-amber-50 text-amber-700",
+  close: "bg-sky-50 text-sky-700",
   too_small: "bg-rose-50 text-rose-700",
   too_large: "bg-rose-50 text-rose-700",
   unknown: "bg-neutral-100 text-neutral-600",
@@ -49,11 +48,14 @@ export function CartScreen() {
                 <p className="text-sm font-medium">
                   Your estimated size: {yourSize}
                   <span className="ml-2 font-normal text-neutral-500">(chest ≈ {Math.round(measurement.chestCm)} cm)</span>
+                  <span className="ml-2 rounded-full bg-neutral-900 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white">
+                    Beta
+                  </span>
                 </p>
                 <p className={`mt-0.5 text-xs ${atRiskCount > 0 ? "text-amber-700" : "text-emerald-700"}`}>
                   {atRiskCount > 0
-                    ? `${atRiskCount} ${atRiskCount === 1 ? "item" : "items"} may not fit — adjust the size or remove it below.`
-                    : "Everything in your cart should fit."}
+                    ? `${atRiskCount} ${atRiskCount === 1 ? "item looks" : "items look"} two or more sizes off your estimate — check ${atRiskCount === 1 ? "it" : "them"} below.`
+                    : "Nothing in your cart is more than a size off your estimate. (The estimate is beta and can be off by a size.)"}
                 </p>
               </div>
             ) : (

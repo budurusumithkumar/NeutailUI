@@ -19,7 +19,7 @@ import {
 } from "./faceScale";
 import { measurementFromScan, median, relativeSpread, type BodyMeasurement } from "./sizing";
 
-type Phase = "starting" | "scanning" | "result" | "denied" | "error";
+type Phase = "starting" | "scanning" | "result" | "unsteady" | "denied" | "error";
 
 const DETECTION_INTERVAL_MS = 50;
 // Readings are judged over a sliding window of the latest ones, so what you did while still settling
@@ -29,6 +29,9 @@ const MAX_SPREAD = 0.12;
 // Real webcam noise can keep the readings from ever agreeing tightly; after this long, accept the
 // median of the latest window anyway (the result still shows how steady it was).
 const HARD_ACCEPT_MS = 12000;
+// After the time limit, a window this unsteady is noise, not a measurement (one real scan read ±35%), so
+// give no size at all rather than a meaningless one.
+const UNRELIABLE_SPREAD = 0.2;
 const SCALE_SMOOTHING_FRAMES = 15;
 // Ignore frames while the face is growing/shrinking (walking towards or away from the camera):
 // the smoothed scale lags behind, which would inflate or shrink the measurement.
@@ -374,7 +377,9 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
             setProgress(Math.min(torsoSamples.length / WINDOW, 1));
             setDiagnostics(
               tick.diagnostics +
-                (shoulderSpread !== null ? ` · steadiness ±${(shoulderSpread * 100).toFixed(0)}%` : ` · ${shoulderSamples.length}/${WINDOW}`),
+                (shoulderSpread !== null
+                ? ` · steadiness ±${(Math.max(shoulderSpread, torsoSpread ?? 0) * 100).toFixed(0)}%`
+                : ` · ${shoulderSamples.length}/${WINDOW}`),
             );
             if (tick.shoulder !== null) {
               setGuidance(
@@ -390,7 +395,14 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
             }
 
             if (shoulderOk && torsoOk) {
-              finish(median(torsoSamples), Math.max(shoulderSpread ?? 0, torsoSpread ?? 0));
+              const spread = Math.max(shoulderSpread ?? 0, torsoSpread ?? 0);
+              if (spread > UNRELIABLE_SPREAD) {
+                stopCamera();
+                drawOverlay([], { width: 1, height: 1 });
+                setPhase("unsteady");
+                return;
+              }
+              finish(median(torsoSamples), spread);
               return;
             }
           }
@@ -570,6 +582,20 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
                 Rescan
               </Button>
             </div>
+          </div>
+        )}
+
+        {phase === "unsteady" && (
+          <div className="mt-4">
+            <p className="text-sm font-medium text-neutral-900">We couldn't get a steady reading.</p>
+            <p className="mt-1 text-sm text-neutral-600">
+              The measurements kept jumping around, so any size would be a guess. Try again: sit upright with your
+              hands resting on your lap (not on the desk), keep still, and make sure your face and shoulders are
+              well lit.
+            </p>
+            <Button className="mt-3" onClick={rescan}>
+              Try again
+            </Button>
           </div>
         )}
 

@@ -1,6 +1,11 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { completeDemoCheckout } from "../../api/purchases";
+import type { DemoCheckoutRequest, PurchaseEventResult } from "../../api/types";
 import { AppLayout } from "../../components/AppLayout";
 import { Button } from "../../components/Button";
+import { Chip } from "../../components/Chip";
+import { useToast } from "../../components/toastContext";
 import { useCartStore, useCartSubtotal } from "../../cart/cartStore";
 import type { CartItem } from "../../cart/types";
 import { BodyScanModal } from "./fit/BodyScanModal";
@@ -16,10 +21,13 @@ const verdictStyles: Record<FitVerdict, string> = {
 };
 
 export function CartScreen() {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const items = useCartStore((state) => state.items);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const changeSize = useCartStore((state) => state.changeSize);
   const removeItem = useCartStore((state) => state.removeItem);
+  const clearCart = useCartStore((state) => state.clear);
   const subtotal = useCartSubtotal();
   const measurement = useBodyProfileStore((state) => state.measurement);
   const [scanOpen, setScanOpen] = useState(false);
@@ -32,14 +40,86 @@ export function CartScreen() {
   );
   const atRiskCount = [...assessments.values()].filter((a) => a?.atRisk).length;
 
+  const [checkoutAttempt, setCheckoutAttempt] = useState<DemoCheckoutRequest | null>(null);
+  const [completedPurchase, setCompletedPurchase] = useState<PurchaseEventResult | null>(null);
+
+  const checkoutMutation = useMutation({
+    mutationFn: completeDemoCheckout,
+    onSuccess: async (result) => {
+      setCompletedPurchase(result);
+      setCheckoutAttempt(null);
+      clearCart();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["customer", "summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["recommendations", "home"] }),
+      ]);
+      showToast(
+        result.transition.changed
+          ? `Profile updated to ${result.transition.new_segment}`
+          : "Purchase completed",
+      );
+    },
+    onError: () => {
+      showToast("Checkout could not be completed. You can safely retry.", "error");
+    },
+  });
+
+  function handleCheckout() {
+    const request =
+      checkoutAttempt ??
+      {
+        idempotency_key: `demo-checkout-${crypto.randomUUID()}`,
+        occurred_at: new Date().toISOString(),
+        items: items.map((item) => ({
+          sku: item.sku,
+          quantity: item.quantity,
+          size: item.size,
+        })),
+      };
+    setCheckoutAttempt(request);
+    checkoutMutation.mutate(request);
+  }
+
+  function resetAttempt() {
+    if (checkoutAttempt) setCheckoutAttempt(null);
+  }
+
   return (
     <AppLayout>
       <h1 className="text-2xl font-semibold">Your cart</h1>
 
       {items.length === 0 ? (
-        <p className="mt-4 text-sm text-neutral-500">
-          Nothing here yet — ask your stylist for a recommendation to get started.
-        </p>
+        completedPurchase ? (
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-emerald-950">Purchase complete</h2>
+              <Chip tone="success">{completedPurchase.purchase_count_90d} purchases in 90 days</Chip>
+            </div>
+            <p className="mt-2 text-sm text-emerald-900">
+              Order {completedPurchase.order_id} has been committed.
+            </p>
+            {completedPurchase.transition.changed && (
+              <div className="mt-4 rounded-xl bg-white p-4 text-sm text-neutral-700">
+                <p className="font-medium">Your profile has been refreshed</p>
+                <p className="mt-1">
+                  {completedPurchase.transition.previous_segment ?? "New customer"}
+                  {" → "}
+                  <span className="font-semibold">{completedPurchase.transition.new_segment}</span>
+                </p>
+                <p className="mt-1 text-xs text-neutral-500">
+                  Loyalty status: {completedPurchase.transition.new_loyalty_status}. Profile version {completedPurchase.profile_version}.
+                </p>
+              </div>
+            )}
+            <p className="mt-3 text-xs text-emerald-800">
+              Points remain unchanged because this demo does not simulate a loyalty accrual transaction.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-neutral-500">
+            Nothing here yet — ask your stylist for a recommendation to get started.
+          </p>
+        )
       ) : (
         <div className="mt-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">
@@ -91,7 +171,10 @@ export function CartScreen() {
                       Size
                       <select
                         value={item.size ?? ""}
-                        onChange={(event) => changeSize(item.sku, item.size ?? null, event.target.value)}
+                        onChange={(event) => {
+                          resetAttempt();
+                          changeSize(item.sku, item.size ?? null, event.target.value);
+                        }}
                         className="rounded-md border border-neutral-300 bg-white px-1.5 py-0.5 text-xs text-neutral-900"
                         aria-label={`Size for ${item.name}`}
                       >
@@ -113,7 +196,10 @@ export function CartScreen() {
                   <div className="flex items-center gap-2">
                     <button
                       className="h-7 w-7 rounded-full border border-neutral-300 text-sm"
-                      onClick={() => updateQuantity(item.sku, item.size ?? null, item.quantity - 1)}
+                      onClick={() => {
+                        resetAttempt();
+                        updateQuantity(item.sku, item.size ?? null, item.quantity - 1);
+                      }}
                       aria-label={`Decrease quantity of ${item.name}`}
                     >
                       −
@@ -121,7 +207,10 @@ export function CartScreen() {
                     <span className="w-6 text-center text-sm">{item.quantity}</span>
                     <button
                       className="h-7 w-7 rounded-full border border-neutral-300 text-sm"
-                      onClick={() => updateQuantity(item.sku, item.size ?? null, item.quantity + 1)}
+                      onClick={() => {
+                        resetAttempt();
+                        updateQuantity(item.sku, item.size ?? null, item.quantity + 1);
+                      }}
                       aria-label={`Increase quantity of ${item.name}`}
                     >
                       +
@@ -130,7 +219,10 @@ export function CartScreen() {
 
                   <button
                     className="text-xs text-neutral-400 hover:text-rose-600"
-                    onClick={() => removeItem(item.sku, item.size ?? null)}
+                    onClick={() => {
+                      resetAttempt();
+                      removeItem(item.sku, item.size ?? null);
+                    }}
                   >
                     Remove
                   </button>
@@ -150,7 +242,10 @@ export function CartScreen() {
                       <Button
                         variant="secondary"
                         className="ml-auto !px-3 !py-1 text-xs"
-                        onClick={() => changeSize(item.sku, item.size ?? null, assessment.suggestedSize!)}
+                        onClick={() => {
+                          resetAttempt();
+                          changeSize(item.sku, item.size ?? null, assessment.suggestedSize!);
+                        }}
                       >
                         {item.size ? "Switch to" : "Use"} {assessment.suggestedSize}
                       </Button>
@@ -166,8 +261,12 @@ export function CartScreen() {
             <span className="text-lg font-semibold">£{subtotal.toFixed(2)}</span>
           </div>
 
-          <Button className="w-full" disabled title="Checkout is coming soon">
-            Checkout (coming soon)
+          <Button
+            className="w-full"
+            disabled={checkoutMutation.isPending}
+            onClick={handleCheckout}
+          >
+            {checkoutMutation.isPending ? "Completing purchase…" : "Complete demo purchase"}
           </Button>
         </div>
       )}

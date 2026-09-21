@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { getCurrentUser } from "../api/auth";
+import { useCartStore } from "../cart/cartStore";
 import { useAuthStore } from "./authStore";
 
 // On app load, a token may exist in storage from a previous visit (docs/02-user-flows.md,
@@ -10,6 +11,11 @@ export function AuthBootstrap({ children }: { children: ReactNode }) {
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
+  const setCartOwner = useCartStore((state) => state.setOwner);
+
+  useEffect(() => {
+    setCartOwner(user?.customer_id ?? null);
+  }, [setCartOwner, user?.customer_id]);
 
   const shouldValidate = Boolean(token) && !user;
 

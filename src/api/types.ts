@@ -22,6 +22,13 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
+export interface DemoResetResponse {
+  reset: true;
+  customer_ids: string[];
+  deleted_records: Record<string, number>;
+  message: string;
+}
+
 export type SessionStatus = "ACTIVE" | "CLOSED";
 
 export interface SessionResponse {
@@ -71,6 +78,31 @@ export interface ProductCard {
   reason_codes: string[];
   available: boolean;
   available_sizes?: string[];
+  category?: string | null;
+  color?: string | null;
+  style?: string | null;
+}
+
+export type HomeRecommendationStrategy =
+  | "CATEGORY_AFFINITY"
+  | "PROFILE_PREFERENCE"
+  | "PROFILE_PERSONALIZATION";
+
+export interface HomeRecommendationSection {
+  section_id: string;
+  title: string;
+  category?: string | null;
+  products: ProductCard[];
+}
+
+export interface HomeRecommendationsResponse {
+  recommendation_id: string;
+  trace_id: string;
+  generated_at: string;
+  status: "SUCCESS" | "NO_RESULTS";
+  strategy: HomeRecommendationStrategy;
+  categories_used: string[];
+  sections: HomeRecommendationSection[];
 }
 
 export type RiskBand = "LOW" | "MEDIUM" | "HIGH";
@@ -83,6 +115,62 @@ export interface FitResult {
   risk_band?: RiskBand;
   reason_codes?: string[];
   explanation?: string | null;
+}
+
+export type FitInterventionStatus =
+  | "ACTION_REQUIRED"
+  | "EXCHANGE_CREATED"
+  | "DECLINED"
+  | "DISMISSED"
+  | "EXPIRED";
+
+export type FitInterventionEventType =
+  | "EXCHANGE_ACCEPTED"
+  | "DECLINED"
+  | "DISMISSED";
+
+export interface FitIntervention {
+  intervention_id: string;
+  customer_id: string;
+  order_id: string;
+  order_item_id: string;
+  sku: string;
+  product_name: string;
+  category?: string | null;
+  delivered_size: string;
+  recommended_size: string;
+  available_sizes: string[];
+  risk_level: RiskBand;
+  confidence: number;
+  reason_codes: string[];
+  evidence: Record<string, unknown>;
+  message: string;
+  status: FitInterventionStatus;
+  inventory_mode: "SIZE_LEVEL" | "SIMULATED_AGGREGATE";
+  simulated_exchange: true;
+  trace_id: string;
+  version: number;
+  expires_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FitInterventionEventInput {
+  event_type: FitInterventionEventType;
+  idempotency_key: string;
+  selected_size?: string | null;
+}
+
+export interface FitInterventionEventResponse {
+  recorded: boolean;
+  replayed: boolean;
+  intervention: FitIntervention;
+  exchange_id?: string | null;
+  exchange_status?: string | null;
+  simulated?: boolean | null;
+  correction_id?: string | null;
+  outbox_id?: string | null;
+  message: string;
 }
 
 export type UpsellStatus = "OFFER_AVAILABLE" | "NO_OFFER" | "FAILED";
@@ -173,6 +261,14 @@ export interface UpsellDecisionEventResponse {
   message: string;
 }
 
+export interface PendingUpsellDecision {
+  decision_id: string;
+  session_id: string;
+  trace_id?: string | null;
+  created_at: string;
+  upsell_result: UpsellResult;
+}
+
 export type AgentStatus = "STARTED" | "COMPLETED" | "FAILED" | "SKIPPED";
 
 export interface AgentActivity {
@@ -206,13 +302,58 @@ export interface CustomerSummary {
   display_name: string;
   city?: string | null;
   segment?: string | null;
+  loyalty_status?: string | null;
   loyalty_tier?: string | null;
   points_balance?: number | null;
+  profile_version: number;
+  previous_segment?: string | null;
+  segment_changed_at?: string | null;
+  purchase_count_90d?: number | null;
   preferred_categories: string[];
   preferred_colors: string[];
   preferred_styles: string[];
   usual_size?: string | null;
   fit_preference?: string | null;
+}
+
+export interface DemoCheckoutItem {
+  sku: string;
+  quantity: number;
+  size?: string | null;
+  color?: string | null;
+}
+
+export interface DemoCheckoutRequest {
+  idempotency_key: string;
+  occurred_at: string;
+  items: DemoCheckoutItem[];
+}
+
+export interface SegmentTransition {
+  previous_segment?: string | null;
+  new_segment: string;
+  previous_loyalty_status?: string | null;
+  new_loyalty_status: string;
+  changed: boolean;
+  changed_at: string;
+  policy_version: string;
+}
+
+export interface PurchaseEventResult {
+  event_id: string;
+  event_type: "PURCHASE_COMPLETED";
+  status: "COMPLETED";
+  replayed: boolean;
+  customer_id: string;
+  order_id: string;
+  purchase_count_90d: number;
+  profile_version: number;
+  transition: SegmentTransition;
+  points_transaction_id?: string | null;
+  points_delta?: number | null;
+  points_balance?: number | null;
+  customer_context?: (CustomerContextSummary & { profile_version?: string }) | null;
+  outbox_ids: string[];
 }
 
 export interface ErrorResponse {

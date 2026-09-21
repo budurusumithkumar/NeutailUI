@@ -1,5 +1,6 @@
 import { isAxiosError } from "axios";
 import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { postChat } from "../../api/chat";
 import { ensureSession } from "../../api/ensureSession";
 import {
@@ -15,6 +16,7 @@ import type {
   UpsellDecisionEventType,
   UpsellResult,
 } from "../../api/types";
+import { useAuthStore } from "../../auth/authStore";
 import { AppLayout } from "../../components/AppLayout";
 import { Button } from "../../components/Button";
 import { useToast } from "../../components/toastContext";
@@ -73,6 +75,8 @@ const upsellEventType: Record<UpsellUserAction, UpsellDecisionEventType> = {
   DISMISSED: "OFFER_DISMISSED",
 };
 
+const EMPTY_TRANSCRIPT: TranscriptEntry[] = [];
+
 function engagementUpsellEntry(
   engagement: EngagementEventResponse,
   sessionId: string,
@@ -109,28 +113,56 @@ function engagementUpsellEntry(
 }
 
 export function ChatScreen() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { showToast } = useToast();
+  const customerId = useAuthStore((state) => state.user?.customer_id);
   const addToCart = useCartStore((state) => state.addItem);
+  const navigationState = location.state as
+    | { selectedSku?: unknown; draft?: unknown }
+    | null;
 
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionOwnerId, setSessionOwnerId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
-  const [input, setInput] = useState("");
-  const [pendingSku, setPendingSku] = useState<string | null>(null);
+  const [input, setInput] = useState(() =>
+    typeof navigationState?.draft === "string" ? navigationState.draft : "",
+  );
+  const [pendingSku, setPendingSku] = useState<string | null>(() =>
+    typeof navigationState?.selectedSku === "string"
+      ? navigationState.selectedSku
+      : null,
+  );
   const [isSending, setIsSending] = useState(false);
   const [isRecordingUpsellAction, setIsRecordingUpsellAction] = useState(false);
   const [detailProduct, setDetailProduct] = useState<ProductCardType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const productViewKeysRef = useRef(new Map<string, string>());
+  const sessionMatchesCustomer = sessionOwnerId === customerId;
+  const activeSessionId = sessionMatchesCustomer ? sessionId : null;
+  const activeTranscript = sessionMatchesCustomer ? transcript : EMPTY_TRANSCRIPT;
 
   useEffect(() => {
-    ensureSession()
+    if (!customerId) return;
+
+    let cancelled = false;
+
+    ensureSession(customerId)
       .then((id) => {
+        if (cancelled) return;
+        setSessionOwnerId(customerId);
         setSessionId(id);
         setTranscript(loadTranscript(id));
       })
       .catch(() => {
+        if (cancelled) return;
         showToast("Couldn't reach Neu.Tail. Please try again.", "error");
       });
-  }, [showToast]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId, showToast]);
 
   useEffect(() => {
     if (sessionId) {
@@ -140,10 +172,15 @@ export function ChatScreen() {
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcript]);
+  }, [activeTranscript]);
+
+  useEffect(() => {
+    if (!navigationState) return;
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, navigate, navigationState]);
 
   async function sendMessage(text: string, selectedSku: string | null): Promise<boolean> {
-    if (!sessionId || !text.trim()) return false;
+    if (!activeSessionId || !text.trim()) return false;
 
     const userEntry: TranscriptEntry = { id: crypto.randomUUID(), kind: "user", text };
     setTranscript((current) => [...current, userEntry]);
@@ -152,7 +189,7 @@ export function ChatScreen() {
     setIsSending(true);
 
     const resultEntry = await runChat({
-      session_id: sessionId,
+      session_id: activeSessionId,
       message: text,
       selected_sku: selectedSku,
     });
@@ -190,11 +227,18 @@ export function ChatScreen() {
 
   function handleOpenDetail(product: ProductCardType) {
     setDetailProduct(product);
-    if (!sessionId) return;
+    if (!activeSessionId) return;
 
-    void recordProductView(sessionId, product.sku)
+    const attemptKey = `${activeSessionId}:${product.sku}`;
+    const idempotencyKey =
+      productViewKeysRef.current.get(attemptKey) ??
+      `chat-product-view-${crypto.randomUUID()}`;
+    productViewKeysRef.current.set(attemptKey, idempotencyKey);
+
+    void recordProductView(activeSessionId, product.sku, { idempotencyKey })
       .then((engagement) => {
-        const entry = engagementUpsellEntry(engagement, sessionId);
+        productViewKeysRef.current.delete(attemptKey);
+        const entry = engagementUpsellEntry(engagement, activeSessionId);
         if (!entry || entry.kind !== "assistant") return;
 
         setTranscript((current) => {
@@ -218,7 +262,7 @@ export function ChatScreen() {
     upsell: UpsellResult,
     action: UpsellUserAction,
   ): Promise<boolean> {
-    if (!sessionId) return false;
+    if (!activeSessionId) return false;
 
     if (!upsell.decision_id) {
       return sendMessage(upsellActionMessage(upsell, action), null);
@@ -228,7 +272,7 @@ export function ChatScreen() {
     try {
       const result = await recordUpsellDecisionEvent(
         upsell.decision_id,
-        sessionId,
+        activeSessionId,
         upsellEventType[action],
       );
       if (result.recorded && result.message) {
@@ -247,13 +291,13 @@ export function ChatScreen() {
     <AppLayout>
       <div className="flex h-[calc(100vh-140px)] flex-col">
         <div className="flex-1 space-y-4 overflow-y-auto py-2">
-          {transcript.length === 0 && (
+          {activeTranscript.length === 0 && (
             <p className="text-sm text-neutral-400">
               Tell your stylist what you're looking for — e.g. "I need a dress for a wedding".
             </p>
           )}
 
-          {transcript.map((entry) => {
+          {activeTranscript.map((entry) => {
             if (entry.kind === "user") {
               return (
                 <div key={entry.id} className="flex justify-end">
@@ -306,10 +350,10 @@ export function ChatScreen() {
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder="Ask your stylist anything…"
-            disabled={!sessionId || isSending}
+            disabled={!activeSessionId || isSending}
             className="flex-1 rounded-full border border-neutral-300 px-4 py-2 text-sm focus:border-neutral-500 focus:outline-none disabled:bg-neutral-50"
           />
-          <Button type="submit" disabled={!sessionId || isSending || !input.trim()}>
+          <Button type="submit" disabled={!activeSessionId || isSending || !input.trim()}>
             Send
           </Button>
         </form>

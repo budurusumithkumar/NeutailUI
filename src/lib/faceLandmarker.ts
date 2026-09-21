@@ -16,6 +16,7 @@ export function loadFaceLandmarker(): Promise<FaceLandmarker> {
           baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
           runningMode: "VIDEO",
           numFaces: 1,
+          outputFacialTransformationMatrixes: true,
         }),
       )
       .catch((error) => {

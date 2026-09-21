@@ -14,12 +14,15 @@ import {
   distanceCm,
   faceCmPerPx,
   faceMetrics,
+  MAX_PITCH_DEG,
+  MIN_PITCH_DEG,
+  facePitchDeg,
   isFacingCamera,
   planeCmPerPx,
 } from "./faceScale";
 import { measurementFromScan, median, relativeSpread, type BodyMeasurement } from "./sizing";
 
-type Phase = "starting" | "scanning" | "result" | "unsteady" | "inconsistent" | "denied" | "error";
+type Phase = "starting" | "scanning" | "result" | "unsteady" | "inconsistent" | "implausible" | "denied" | "error";
 
 const DETECTION_INTERVAL_MS = 50;
 // Readings are judged over a sliding window of the latest ones, so what you did while still settling
@@ -41,6 +44,9 @@ const INVALID_RESET_MS = 1200;
 const MIN_FACE_PX = 40;
 // Two separate scans must give chest estimates this close (about one size step is 5 cm) before a size is shown,
 // so a size only appears when the posture was reproduced; otherwise the scan repeats.
+// A chest outside this range is not a measurement, whatever the scans say (a camera looking up at a belly read 157 cm).
+const MIN_PLAUSIBLE_CHEST_CM = 70;
+const MAX_PLAUSIBLE_CHEST_CM = 145;
 const AGREE_WITHIN_CM = 5;
 const MAX_SCANS = 4;
 // A short pause between scans so the person relaxes and re-takes the posture, rather than freezing in it.
@@ -57,11 +63,12 @@ const gaugePct = (cm: number) => Math.min(100, Math.max(0, ((cm - MIN_GAUGE_CM) 
 type CheckState = "ok" | "fail" | "wait";
 interface Checks {
   face: CheckState;
+  camera: CheckState;
   shoulders: CheckState;
   chest: CheckState;
   arms: CheckState;
 }
-const NO_CHECKS: Checks = { face: "wait", shoulders: "wait", chest: "wait", arms: "wait" };
+const NO_CHECKS: Checks = { face: "wait", camera: "wait", shoulders: "wait", chest: "wait", arms: "wait" };
 
 interface Tick {
   checks: Checks;
@@ -251,6 +258,21 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
       if (faceSizes.length >= MIN_FRAMES_FOR_DRIFT && Math.abs(metrics.facePx / median(faceSizes) - 1) > MAX_FACE_SIZE_DRIFT) {
         return { ...base, checks: faceFail, blocking: "Hold still — you're moving towards or away from the camera." };
       }
+      const pitch = facePitchDeg(faceResult.facialTransformationMatrixes?.[0]?.data);
+      if (pitch !== null) {
+        base.diagnostics += ` · tilt ${pitch.toFixed(0)}°`;
+        if (pitch < MIN_PITCH_DEG || pitch > MAX_PITCH_DEG) {
+          return {
+            ...base,
+            checks: { ...NO_CHECKS, face: "ok", camera: "fail" },
+            blocking:
+              pitch < MIN_PITCH_DEG
+                ? "The camera is looking up at you. Raise the screen or laptop so the camera is level with your face and chest, and look straight at it."
+                : "The camera is looking down at you. Lower the screen or tilt it back so the camera is level, and look straight at it.",
+          };
+        }
+      }
+      base.checks.camera = pitch === null ? "wait" : "ok";
       if (metrics.facePx < MIN_FACE_PX || distance > MAX_DISTANCE_CM) {
         return { ...base, checks: faceFail, blocking: "Move a little closer to the camera." };
       }
@@ -377,8 +399,14 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
         setPhase("result");
       };
       // A scan's window passed; agree it with the previous scan, or hold it and ask for another.
-      const completeScan = (time: number, torso: number, outline: number, spread: number): "done" | "again" | "giveUp" => {
+      const completeScan = (
+        time: number,
+        torso: number,
+        outline: number,
+        spread: number,
+      ): "done" | "again" | "giveUp" | "implausible" => {
         const chestCm = measurementFromScan(outline, torso, spread).chestCm;
+        if (chestCm < MIN_PLAUSIBLE_CHEST_CM || chestCm > MAX_PLAUSIBLE_CHEST_CM) return "implausible";
         if (previous && Math.abs(previous.chestCm - chestCm) <= AGREE_WITHIN_CM) {
           finish(
             (previous.torso + torso) / 2,
@@ -471,6 +499,12 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
               }
               const outcome = completeScan(time, median(torsoSamples), median(shoulderSamples), spread);
               if (outcome === "done") return;
+              if (outcome === "implausible") {
+                stopCamera();
+                drawOverlay([], { width: 1, height: 1 });
+                setPhase("implausible");
+                return;
+              }
               if (outcome === "giveUp") {
                 stopCamera();
                 drawOverlay([], { width: 1, height: 1 });
@@ -559,6 +593,7 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
               {(
                 [
                   ["face", "Face"],
+                  ["camera", "Camera level"],
                   ["shoulders", "Shoulders"],
                   ["chest", "Chest in view"],
                   ["arms", "Arms clear"],
@@ -669,6 +704,20 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
               The measurements kept jumping around, so any size would be a guess. Try again: sit upright with your
               hands resting on your lap (not on the desk), keep still, and make sure your face and shoulders are
               well lit.
+            </p>
+            <Button className="mt-3" onClick={rescan}>
+              Try again
+            </Button>
+          </div>
+        )}
+
+        {phase === "implausible" && (
+          <div className="mt-4">
+            <p className="text-sm font-medium text-neutral-900">That measurement doesn't look right.</p>
+            <p className="mt-1 text-sm text-neutral-600">
+              It came out as a chest size no adult would have, which usually means the camera angle is off (looking up
+              at you or down on you) or something is in the way. Set the screen so the camera is level with your face
+              and chest, sit upright with your hands on your lap, and try again.
             </p>
             <Button className="mt-3" onClick={rescan}>
               Try again

@@ -96,3 +96,15 @@ export function distanceCm(faceScale: number, video: Size2D): number {
 export function planeCmPerPx(faceScale: number, video: Size2D, offsetCm: number): number {
   return faceScale * (1 + offsetCm / distanceCm(faceScale, video));
 }
+
+// Head pitch (degrees) relative to the camera, from the face model's 4x4 column-major transform. On six real
+// frames of one person: 3, 7, 9 (ordinary scans) vs 15, 19 (scans that went wrong) and -11 (camera below the
+// face, looking up: the belly bulged toward the lens and read as a 157 cm chest). A heuristic, not a standard.
+export const MIN_PITCH_DEG = -8;
+export const MAX_PITCH_DEG = 12;
+
+export function facePitchDeg(matrix: ArrayLike<number> | undefined): number | null {
+  if (!matrix || matrix.length < 16) return null;
+  const r12 = matrix[2 * 4 + 1]; // row 1, column 2
+  return (Math.asin(Math.max(-1, Math.min(1, -r12))) * 180) / Math.PI;
+}

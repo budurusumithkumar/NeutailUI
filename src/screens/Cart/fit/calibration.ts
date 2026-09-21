@@ -26,7 +26,9 @@ export interface CalibrationRecord extends CalibrationInput {
     adjShoulderCm: number;
     torsoCm: number;
     torsoDepthEstCm: number;
-    partialChest: boolean;
+    scansUsed: number;
+    scan1ChestCm: number | null;
+    scan2ChestCm: number | null;
     spread: number;
     outlineShoulderCm: number | null;
     jointCm: number | null;
@@ -77,7 +79,9 @@ export function saveRecord(measurement: BodyMeasurement, input: CalibrationInput
       adjShoulderCm: measurement.shoulderWidthCm,
       torsoCm: measurement.torsoWidthCm,
       torsoDepthEstCm: measurement.torsoDepthCm,
-      partialChest: measurement.partialChest,
+      scansUsed: measurement.scanChestsCm?.length ?? 1,
+      scan1ChestCm: measurement.scanChestsCm?.[0] ?? null,
+      scan2ChestCm: measurement.scanChestsCm?.[1] ?? null,
       spread: measurement.spread,
       outlineShoulderCm: measurement.raw?.outlineShoulderCm ?? null,
       jointCm: measurement.raw?.jointCm ?? null,
@@ -125,7 +129,9 @@ const CSV_COLUMNS: [string, (r: CalibrationRecord) => string | number | boolean 
   ["facePx", (r) => r.scan.facePx],
   ["irisPx", (r) => r.scan.irisPx],
   ["reachCm", (r) => r.scan.reachCm],
-  ["partialChest", (r) => r.scan.partialChest],
+  ["scansUsed", (r) => r.scan.scansUsed],
+  ["scan1ChestCm", (r) => r.scan.scan1ChestCm === null ? null : Math.round(r.scan.scan1ChestCm * 10) / 10],
+  ["scan2ChestCm", (r) => r.scan.scan2ChestCm === null ? null : Math.round(r.scan.scan2ChestCm * 10) / 10],
   ["spread", (r) => r.scan.spread],
 ];
 

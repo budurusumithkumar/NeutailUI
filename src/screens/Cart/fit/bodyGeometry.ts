@@ -33,13 +33,11 @@ const EDGE_MARGIN_FRACTION = 0.02;
 
 // Rows sampled, in cm below the shoulder line: below the armpits (so raised arms aren't included)
 // down through the upper abdomen — the widest part a T-shirt has to go around.
+// The torso is always measured on the same fixed strip, however far away the person sits. A band that grew
+// with the visible frame measured a different part of the body at every distance (thin chest strip at
+// 0.5 m, chest plus belly at 0.8 m) — one of the reasons repeated scans of one person disagreed.
 const BAND_FROM_CM = 12;
-const BAND_TO_CM = 40;
-// At ~1 m a laptop camera often cuts the frame off around the belly, so the band is clipped to what is
-// visible; it just needs to reach past the chest.
-const MIN_TORSO_REACH_CM = 18;
-// Bands reaching at least this far below the shoulders include the belly.
-const FULL_BAND_REACH_CM = 30;
+const BAND_TO_CM = 18;
 const BAND_ROW_STEP_PX = 2;
 const WIDTH_PERCENTILE = 85;
 
@@ -209,13 +207,13 @@ export function torsoSample(
   const centerX = ((shoulders[0].x + shoulders[1].x) / 2) * mask.width;
   const rowFrom = shoulderY + BAND_FROM_CM / cmPerMaskPxY;
   const limit = mask.height * (1 - EDGE_MARGIN_FRACTION);
-  const rowNeeded = shoulderY + MIN_TORSO_REACH_CM / cmPerMaskPxY;
+  const rowNeeded = shoulderY + BAND_TO_CM / cmPerMaskPxY;
   if (rowNeeded > limit) {
     // Everything scales about the image centre as the camera moves away.
     const moveBackFactor = (rowNeeded - mask.height / 2) / (limit - mask.height / 2);
     return { ok: false, message: "Your chest isn't fully in the frame.", moveBackFactor, reason: "reach" };
   }
-  const rowTo = Math.min(shoulderY + BAND_TO_CM / cmPerMaskPxY, limit);
+  const rowTo = rowNeeded;
 
   // Judge every row on its own: just under the armpit the arm always touches the torso, so those rows are
   // as wide as the shoulders even with the elbows out, while rows further down show the torso alone.
@@ -238,17 +236,15 @@ export function torsoSample(
   if (clearWidths.length < MIN_CLEAR_ROWS) {
     return {
       ok: false,
-      message: "Rest your hands on your hips, elbows out, so your arms don't blend into your torso.",
+      message: "Rest your hands on your lap with your elbows slightly out, so your arms don't blend into your torso.",
       reason: "arms",
       detail: `torso ${percentile(allWidths, 50).toFixed(0)} cm = ${Math.round((percentile(allWidths, 50) / outerShoulderWidthCm) * 100)}% of shoulders (needs < ${Math.round(MAX_TORSO_TO_OUTER_SHOULDER * 100)}%)`,
     };
   }
-  const reachCm = (rowTo - shoulderY) * cmPerMaskPxY;
-  // A short band has no belly rows to catch, and its widest rows are the ones nearest an arm, so use the
-  // median there; the wider percentile is for full-height bands where the belly is the widest part.
-  const torsoWidthCm = percentile(clearWidths, reachCm < FULL_BAND_REACH_CM ? 50 : WIDTH_PERCENTILE);
+  // Median of the clear rows: a fixed strip has no belly to catch, and its widest rows are the ones nearest an arm.
+  const torsoWidthCm = percentile(clearWidths, 50);
   if (torsoWidthCm < MIN_TORSO_WIDTH_CM || torsoWidthCm > MAX_TORSO_WIDTH_CM) {
     return { ok: false, message: "Couldn't get a clean read — hold still.", reason: "unclear" };
   }
-  return { ok: true, torsoWidthCm, reachCm, runs };
+  return { ok: true, torsoWidthCm, reachCm: BAND_TO_CM, runs };
 }

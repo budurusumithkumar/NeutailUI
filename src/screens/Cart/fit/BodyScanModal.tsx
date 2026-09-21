@@ -19,7 +19,7 @@ import {
 } from "./faceScale";
 import { measurementFromScan, median, relativeSpread, type BodyMeasurement } from "./sizing";
 
-type Phase = "starting" | "scanning" | "result" | "unsteady" | "denied" | "error";
+type Phase = "starting" | "scanning" | "result" | "unsteady" | "inconsistent" | "denied" | "error";
 
 const DETECTION_INTERVAL_MS = 50;
 // Readings are judged over a sliding window of the latest ones, so what you did while still settling
@@ -39,12 +39,16 @@ const MAX_FACE_SIZE_DRIFT = 0.04;
 const MIN_FRAMES_FOR_DRIFT = 6;
 const INVALID_RESET_MS = 1200;
 const MIN_FACE_PX = 40;
-// A sampled band shorter than this (cm below the shoulders) can't reach the belly.
-const PARTIAL_CHEST_BELOW_CM = 30;
+// Two separate scans must give chest estimates this close (about one size step is 5 cm) before a size is shown,
+// so a size only appears when the posture was reproduced; otherwise the scan repeats.
+const AGREE_WITHIN_CM = 5;
+const MAX_SCANS = 4;
+// A short pause between scans so the person relaxes and re-takes the posture, rather than freezing in it.
+const BETWEEN_SCANS_MS = 3500;
 
 
 const DEFAULT_GUIDANCE =
-  "Sit comfortably facing the camera with both shoulders fully in the frame and your hands resting on your hips, elbows out.";
+  "Sit upright facing the camera with both shoulders in the frame, hands resting on your lap and elbows slightly out.";
 
 const MIN_GAUGE_CM = 30;
 const MAX_GAUGE_CM = 150;
@@ -77,6 +81,32 @@ interface Tick {
   diagnostics: string;
   runs: OverlayRun[];
   frame: { width: number; height: number };
+}
+
+// The posture to hold for both scans: same one each time is what makes the two scans comparable.
+function PostureGuide() {
+  return (
+    <div className="mt-3 flex items-center gap-3 rounded-lg bg-neutral-50 p-3" data-testid="posture-guide">
+      <svg viewBox="0 0 64 72" width="64" height="72" className="shrink-0 text-neutral-700" aria-hidden="true">
+        <g fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="32" cy="13" r="8" />
+          <path d="M32 21v5" />
+          <path d="M14 34c0-6 8-8 18-8s18 2 18 8" />
+          <path d="M14 34l-3 20" />
+          <path d="M50 34l3 20" />
+          <path d="M11 54l14 6" />
+          <path d="M53 54l-14 6" />
+          <path d="M18 36v26M46 36v26" strokeOpacity="0.35" />
+        </g>
+      </svg>
+      <ul className="space-y-0.5 text-xs text-neutral-600">
+        <li>Sit upright, shoulders level, facing the camera.</li>
+        <li>Hands resting on your lap; elbows slightly out.</li>
+        <li>Arms off the desk and away from the camera.</li>
+        <li className="font-medium text-neutral-800">Hold the same posture for both scans.</li>
+      </ul>
+    </div>
+  );
 }
 
 // A picture of the frame the size came from, with what was measured drawn on it, so the user can see
@@ -129,6 +159,7 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [checks, setChecks] = useState<Checks>(NO_CHECKS);
   const [gauge, setGauge] = useState<{ distanceCm: number; targetCm: number } | null>(null);
+  const [scanRound, setScanRound] = useState(1);
   const [errorDetail, setErrorDetail] = useState("");
 
   useEffect(() => {
@@ -301,19 +332,23 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
       let lastGood: Tick | null = null;
       let lastWithTorso: Tick | null = null;
       let lastReachCm = 0;
+      let round = 1;
+      let pauseUntil = 0;
+      let pauseNote = "";
+      let previous: { chestCm: number; torso: number; outline: number; spread: number } | null = null;
+      setScanRound(1);
 
       const pushWindow = (values: number[], value: number) => {
         values.push(value);
         if (values.length > WINDOW) values.shift();
       };
-      const finish = (torso: number, spread: number) => {
+      const finish = (torso: number, outline: number, spread: number, chests: number[]) => {
         const measurement = measurementFromScan(
-          median(shoulderSamples),
+          outline,
           torso,
           spread,
-          lastReachCm < PARTIAL_CHEST_BELOW_CM,
           {
-            outlineShoulderCm: median(shoulderSamples),
+            outlineShoulderCm: outline,
             torsoCm: torso,
             jointCm: lastGood?.jointCm ?? null,
             distanceCm: lastGood?.distanceCm ?? null,
@@ -321,6 +356,7 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
             irisPx: lastGood?.irisPx ?? null,
             reachCm: lastReachCm,
           },
+          chests,
         );
         const shown = lastWithTorso ?? lastGood;
         setSnapshot(
@@ -328,7 +364,9 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
             ? makeSnapshot(
                 video,
                 shown,
-                `outline shoulders ${median(shoulderSamples).toFixed(1)} cm · torso ${torso.toFixed(1)} cm · steadiness ±${(spread * 100).toFixed(0)}%`,
+                `outline shoulders ${outline.toFixed(1)} cm · torso ${torso.toFixed(1)} cm · ${chests.length} scans agreed (${chests
+                  .map((c) => Math.round(c))
+                  .join(" & ")} cm)`,
               )
             : null,
         );
@@ -338,6 +376,31 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
         drawOverlay([], { width: 1, height: 1 });
         setPhase("result");
       };
+      // A scan's window passed; agree it with the previous scan, or hold it and ask for another.
+      const completeScan = (time: number, torso: number, outline: number, spread: number): "done" | "again" | "giveUp" => {
+        const chestCm = measurementFromScan(outline, torso, spread).chestCm;
+        if (previous && Math.abs(previous.chestCm - chestCm) <= AGREE_WITHIN_CM) {
+          finish(
+            (previous.torso + torso) / 2,
+            (previous.outline + outline) / 2,
+            Math.max(previous.spread, spread),
+            [previous.chestCm, chestCm],
+          );
+          return "done";
+        }
+        if (round >= MAX_SCANS) return "giveUp";
+        pauseNote = previous
+          ? `The two scans didn't match (${Math.round(previous.chestCm)} vs ${Math.round(chestCm)} cm). Relax, then hold the same posture again.`
+          : `Scan 1 done (chest ≈ ${Math.round(chestCm)} cm). Relax your shoulders, then sit up and hold the same posture again.`;
+        previous = { chestCm, torso, outline, spread };
+        round += 1;
+        pauseUntil = time + BETWEEN_SCANS_MS;
+        shoulderSamples = [];
+        torsoSamples = [];
+        history = { scales: [], faceSizes: [] };
+        setScanRound(round);
+        return "again";
+      };
 
       const loop = (time: number) => {
         if (cancelled) return;
@@ -346,8 +409,9 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
             lastDetection = time;
             const tick = measure(face, body, video, time, history);
             drawOverlay(tick.runs, tick.frame);
+            const pausing = time < pauseUntil;
 
-            if (tick.shoulder !== null) {
+            if (tick.shoulder !== null && !pausing) {
               lastGood = tick;
               if (tick.torso !== null) lastWithTorso = tick;
               if (shoulderSamples.length === 0) firstValid = time;
@@ -357,11 +421,12 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
                 lastReachCm = tick.torsoReachCm ?? lastReachCm;
               }
               lastValid = time;
-            } else if (time - lastValid > INVALID_RESET_MS) {
+            } else if (!pausing && time - lastValid > INVALID_RESET_MS) {
               shoulderSamples = [];
               torsoSamples = [];
               history = { scales: [], faceSizes: [] };
             }
+            if (pausing) lastValid = time;
 
             const elapsed = shoulderSamples.length > 0 ? time - firstValid : 0;
             const hardAccept = elapsed >= HARD_ACCEPT_MS;
@@ -374,14 +439,16 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
 
             setChecks(tick.checks);
             setGauge(tick.distanceCm !== null && tick.targetCm !== null ? { distanceCm: tick.distanceCm, targetCm: tick.targetCm } : null);
-            setProgress(Math.min(torsoSamples.length / WINDOW, 1));
+            setProgress(pausing ? 0 : Math.min(torsoSamples.length / WINDOW, 1));
             setDiagnostics(
               tick.diagnostics +
                 (shoulderSpread !== null
-                ? ` · steadiness ±${(Math.max(shoulderSpread, torsoSpread ?? 0) * 100).toFixed(0)}%`
-                : ` · ${shoulderSamples.length}/${WINDOW}`),
+                  ? ` · steadiness ±${(Math.max(shoulderSpread, torsoSpread ?? 0) * 100).toFixed(0)}%`
+                  : ` · ${shoulderSamples.length}/${WINDOW}`),
             );
-            if (tick.shoulder !== null) {
+            if (pausing) {
+              setGuidance(`${pauseNote} (${Math.max(1, Math.ceil((pauseUntil - time) / 1000))} s)`);
+            } else if (tick.shoulder !== null) {
               setGuidance(
                 tick.hint ??
                   (tick.torso === null
@@ -394,7 +461,7 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
               setGuidance(tick.blocking ?? DEFAULT_GUIDANCE);
             }
 
-            if (shoulderOk && torsoOk) {
+            if (!pausing && shoulderOk && torsoOk) {
               const spread = Math.max(shoulderSpread ?? 0, torsoSpread ?? 0);
               if (spread > UNRELIABLE_SPREAD) {
                 stopCamera();
@@ -402,8 +469,14 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
                 setPhase("unsteady");
                 return;
               }
-              finish(median(torsoSamples), spread);
-              return;
+              const outcome = completeScan(time, median(torsoSamples), median(shoulderSamples), spread);
+              if (outcome === "done") return;
+              if (outcome === "giveUp") {
+                stopCamera();
+                drawOverlay([], { width: 1, height: 1 });
+                setPhase("inconsistent");
+                return;
+              }
             }
           }
         } catch (error) {
@@ -428,6 +501,7 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
   function rescan() {
     setResult(null);
     setSnapshot(null);
+    setScanRound(1);
     setGauge(null);
     setChecks(NO_CHECKS);
     setProgress(0);
@@ -478,6 +552,9 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
 
         {phase === "scanning" && (
           <div className="mt-3">
+            <p className="mb-1.5 text-xs font-medium uppercase text-neutral-400" data-testid="scan-round">
+              {scanRound <= 2 ? `Scan ${scanRound} of 2` : `Scan ${scanRound} — needs two matching scans`}
+            </p>
             <ul className="mb-2 flex flex-wrap gap-1.5 text-xs" aria-label="Scan checks">
               {(
                 [
@@ -528,6 +605,7 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
             )}
+            <PostureGuide />
             {diagnostics && <p className="mt-2 text-[11px] text-neutral-400">{diagnostics}</p>}
           </div>
         )}
@@ -557,10 +635,9 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
               Shoulder width ≈ {Math.round(result.shoulderWidthCm)} cm, torso width ≈ {Math.round(result.torsoWidthCm)} cm
               (depth estimated at {Math.round(result.torsoDepthCm)} cm).
             </p>
-            {result.partialChest && (
-              <p className="mt-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
-                Only your upper chest was in view, so a broad belly can read a little small. Sitting back a bit more
-                (about 1 m) shows more of your torso and gives a better size.
+            {result.scanChestsCm && result.scanChestsCm.length > 1 && (
+              <p className="mt-1 text-xs text-neutral-500">
+                {result.scanChestsCm.length} scans agreed ({result.scanChestsCm.map((c) => Math.round(c)).join(" cm and ")} cm).
               </p>
             )}
             {result.spread > 0.12 && (
@@ -592,6 +669,19 @@ export function BodyScanModal({ onClose }: { onClose: () => void }) {
               The measurements kept jumping around, so any size would be a guess. Try again: sit upright with your
               hands resting on your lap (not on the desk), keep still, and make sure your face and shoulders are
               well lit.
+            </p>
+            <Button className="mt-3" onClick={rescan}>
+              Try again
+            </Button>
+          </div>
+        )}
+
+        {phase === "inconsistent" && (
+          <div className="mt-4">
+            <p className="text-sm font-medium text-neutral-900">The scans wouldn't agree.</p>
+            <p className="mt-1 text-sm text-neutral-600">
+              After {MAX_SCANS} scans no two matched, so any size would be a guess. Sit upright with your hands on
+              your lap, elbows slightly out, in good light, and keep the same posture each time.
             </p>
             <Button className="mt-3" onClick={rescan}>
               Try again

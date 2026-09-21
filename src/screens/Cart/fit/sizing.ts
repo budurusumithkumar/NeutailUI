@@ -53,11 +53,11 @@ export interface BodyMeasurement {
   /** Front-view torso width measured, and the front-to-back depth estimated from it. */
   torsoWidthCm: number;
   torsoDepthCm: number;
-  /** True when only the upper chest was in view (band too short to reach the belly), so a broad belly may be under-read. */
-  partialChest: boolean;
   /** How much the final readings varied (IQR / median); higher means the person moved or the camera was noisy. */
   spread: number;
   raw?: ScanRaw;
+  /** The chest estimate from each agreeing scan (the result is their mean). */
+  scanChestsCm?: number[];
 }
 
 export function median(values: number[]): number {
@@ -94,33 +94,21 @@ export function estimateTorsoDepthCm(torsoWidthCm: number): number {
   return DEPTH_PER_WIDTH * torsoWidthCm + DEPTH_OFFSET_CM;
 }
 
-// Chest girth regressed on outer shoulder width (adults: larger builds gain chest faster than shoulder
-// breadth, hence slope > 2). Unvalidated — calibrate against tape measurements.
-export const CHEST_PER_SHOULDER_CM = 2.4;
-export const CHEST_SHOULDER_OFFSET_CM = -11;
-
-export function chestFromShoulderWidth(shoulderWidthCm: number): number {
-  return CHEST_PER_SHOULDER_CM * shoulderWidthCm + CHEST_SHOULDER_OFFSET_CM;
-}
-
-// When the torso is in frame the torso-based girth is the better signal; the shoulder-based one steadies it.
-const TORSO_WEIGHT = 0.65;
-
 // The outline includes the sleeve/shirt shoulder, ~1.5 cm on each side beyond the body.
 export const SHOULDER_CLOTHING_ALLOWANCE_CM = 3;
 
+// The chest comes from the torso strip alone. Shoulder width used to be blended in (x2.4), but it was the noisiest
+// input — one person's outline read 42 to 63 cm across scans — so it is now only a sanity check and a display value.
 export function measurementFromScan(
   outlineShoulderWidthCm: number,
   torsoWidthCm: number,
   spread = 0,
-  partialChest = false,
   raw?: ScanRaw,
+  scanChestsCm?: number[],
 ): BodyMeasurement {
   const shoulderWidthCm = outlineShoulderWidthCm - SHOULDER_CLOTHING_ALLOWANCE_CM;
   const torsoDepthCm = estimateTorsoDepthCm(torsoWidthCm);
-  const chestCm =
-    TORSO_WEIGHT * (ellipseGirth(torsoWidthCm, torsoDepthCm) + GIRTH_ADJUST_CM) +
-    (1 - TORSO_WEIGHT) * chestFromShoulderWidth(shoulderWidthCm);
+  const chestCm = ellipseGirth(torsoWidthCm, torsoDepthCm) + GIRTH_ADJUST_CM;
   const { index, alternate } = locate(chestCm, CHEST_UPPER_BOUND_CM, LETTER_BORDERLINE_MARGIN_CM);
   return {
     size: SIZE_ORDER[index],
@@ -129,9 +117,9 @@ export function measurementFromScan(
     shoulderWidthCm,
     torsoWidthCm,
     torsoDepthCm,
-    partialChest,
     spread,
     raw,
+    scanChestsCm,
   };
 }
 

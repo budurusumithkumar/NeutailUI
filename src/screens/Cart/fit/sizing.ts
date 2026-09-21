@@ -42,7 +42,11 @@ export interface ScanRaw {
   reachCm: number;
 }
 
+export type ScanEngine = "shoulder-v1" | "face-torso-v2";
+
 export interface BodyMeasurement {
+  /** Which scan produced this: the original quick shoulder-width scan, or the face-scale + torso scan. */
+  engine?: ScanEngine;
   size: LetterSize;
   /** Neighbouring size when the chest estimate is within the borderline margin of a boundary. */
   alternateSize: LetterSize | null;
@@ -111,6 +115,7 @@ export function measurementFromScan(
   const chestCm = ellipseGirth(torsoWidthCm, torsoDepthCm) + GIRTH_ADJUST_CM;
   const { index, alternate } = locate(chestCm, CHEST_UPPER_BOUND_CM, LETTER_BORDERLINE_MARGIN_CM);
   return {
+    engine: "face-torso-v2",
     size: SIZE_ORDER[index],
     alternateSize: alternate === null ? null : SIZE_ORDER[alternate],
     chestCm,
@@ -120,6 +125,31 @@ export function measurementFromScan(
     spread,
     raw,
     scanChestsCm,
+  };
+}
+
+/** Letter size (and a neighbour when within the borderline margin) for a chest measurement in cm. */
+export function sizeFromChest(chestCm: number): { size: LetterSize; alternateSize: LetterSize | null } {
+  const { index, alternate } = locate(chestCm, CHEST_UPPER_BOUND_CM, LETTER_BORDERLINE_MARGIN_CM);
+  return { size: SIZE_ORDER[index], alternateSize: alternate === null ? null : SIZE_ORDER[alternate] };
+}
+
+// The original quick scan: the pose model's metric ("world") shoulder-joint distance, and chest taken as
+// this multiple of it. Fast and needs no face, torso or height, but it cannot see chest or belly and the
+// pose model's world scale drifts toward an average body, so a true XXL read as XS/S/M.
+export const CHEST_TO_SHOULDER_RATIO = 2.4;
+
+export function measurementFromShoulderWidth(shoulderWidthM: number): BodyMeasurement {
+  const shoulderWidthCm = shoulderWidthM * 100;
+  const chestCm = shoulderWidthCm * CHEST_TO_SHOULDER_RATIO;
+  return {
+    engine: "shoulder-v1",
+    ...sizeFromChest(chestCm),
+    chestCm,
+    shoulderWidthCm,
+    torsoWidthCm: 0,
+    torsoDepthCm: 0,
+    spread: 0,
   };
 }
 

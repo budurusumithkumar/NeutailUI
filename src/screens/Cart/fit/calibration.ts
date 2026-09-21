@@ -19,13 +19,14 @@ export interface CalibrationInput {
 
 export interface CalibrationRecord extends CalibrationInput {
   savedAt: string;
+  engine: string;
   scan: {
     estChestCm: number;
     estSize: string;
     estAltSize: string | null;
     adjShoulderCm: number;
-    torsoCm: number;
-    torsoDepthEstCm: number;
+    torsoCm: number | null;
+    torsoDepthEstCm: number | null;
     scansUsed: number;
     scan1ChestCm: number | null;
     scan2ChestCm: number | null;
@@ -72,13 +73,14 @@ export function saveRecord(measurement: BodyMeasurement, input: CalibrationInput
   const record: CalibrationRecord = {
     ...input,
     savedAt: new Date().toISOString(),
+    engine: measurement.engine ?? "face-torso-v2",
     scan: {
       estChestCm: measurement.chestCm,
       estSize: measurement.size,
       estAltSize: measurement.alternateSize,
       adjShoulderCm: measurement.shoulderWidthCm,
-      torsoCm: measurement.torsoWidthCm,
-      torsoDepthEstCm: measurement.torsoDepthCm,
+      torsoCm: measurement.engine === "shoulder-v1" ? null : measurement.torsoWidthCm,
+      torsoDepthEstCm: measurement.engine === "shoulder-v1" ? null : measurement.torsoDepthCm,
       scansUsed: measurement.scanChestsCm?.length ?? 1,
       scan1ChestCm: measurement.scanChestsCm?.[0] ?? null,
       scan2ChestCm: measurement.scanChestsCm?.[1] ?? null,
@@ -111,6 +113,7 @@ export function clearRecords(): void {
 
 const CSV_COLUMNS: [string, (r: CalibrationRecord) => string | number | boolean | null][] = [
   ["savedAt", (r) => r.savedAt],
+  ["engine", (r) => r.engine],
   ["person", (r) => r.person],
   ["tapeChestCm", (r) => r.tapeChestCm],
   ["tapeBellyCm", (r) => r.tapeBellyCm],
